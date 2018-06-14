@@ -5,13 +5,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
-from torch.optim import Adam
 
-import numpy as np
 
 # squash nonlinearity
 # INPUT:	caps = tensor with size (batch)x(num_caps)x(cap_size)
-# OUTPUT:	caps, but normalized along last dimension using squash linearity
+# OUTPUT:	caps, but with magnitude<=1 along last dimension using squash linearity
 def squash(caps):
 #	print(caps.shape)
 	square_norm = (caps**2).sum(-1, keepdim=True) # norm of each capsule, (batch)x(cap_size)x1 
@@ -32,31 +30,33 @@ class ConvNet(nn.Module):
 			)
 
 	def forward(self, images):
-		x = self.layer1(images)
-		return x
+		return self.layer1(images)
+
 
 # primary capsule layer (responsible for converting ConvNet output into capsules)
 class PrimaryCaps(nn.Module):
 	def __init__(self, cap_size=8, c_in=256, c_out=32, kernel=9, stride=2, pad=0):
 		super(PrimaryCaps, self).__init__()
 
-		# create list of (num_caps) conv filters (one for each capsule)
+		# create list of 8 conv filters (one for each 8D capsule feature)
 		self.capsules = nn.ModuleList([
 			nn.Conv2d(c_in, c_out, kernel, stride=stride, padding=pad) for i in range(cap_size)
 			])
 
-	def forward(self, input):
-		x = [capsule(input) for capsule in self.capsules] # create list of (num_cap) caps each with shape (batch)x32x6x6
+	# takes input of convolution kernels output by previous conv layer
+	# produces 1152 8D capsules per batch example
+	def forward(self, conv_kernels):
+		u = [capsule(conv_kernels) for capsule in self.capsules] # create list of 8 cap dimensions each with shape (batch)x32x6x6
 		
-		x = torch.stack(x, dim=1) # sticks tensors together along dim=1, shape is (batch)x(cap_size)x32x66
+		u = torch.stack(u, dim=1) # sticks tensors together along dim=1, shape is (batch)x8x32x6x6
 
-		x = x.view(x.shape[0], 32*6**2, -1) # reshape tensor to be (batch)x1152x(cap_size)
+		u = u.view(u.shape[0], 32*6**2, -1) # reshape tensor to be (batch)x1152x8
 
-		x = squash(x) # squash nonlinearity to give capsules magnitude=1
-		return x
+		u = squash(u) # squash nonlinearity to give capsules magnitude<=1 along last dimension
+		return u
 
-
-
+# digit capsule layer (10 16D capsules whose magnitude determines the probability that digit
+# is present and whose entries determine parameters of that digit)
 class DigitCaps(nn.Module):
 	def __init__(self, num_caps=10, num_routes=32*6**2, caps_in=8, caps_dim=16):
 		super(DigitCaps, self).__init__()
@@ -69,19 +69,20 @@ class DigitCaps(nn.Module):
 
 		self.CUDA = torch.cuda.is_available() # whether or not to use GPU
 
+	# takes 1152 8D capsules (per batch example) as input
+	# produces 10 16D capsules
+	def forward(self, prim_caps):
+		bs = prim_caps.shape[0] # batch size
 
-	def forward(self, input):
-		bs = input.shape[0] # batch size
+		u = torch.stack([prim_caps]*self.num_caps, dim=2)	# repeat each capsule (num_caps) times along dim=2
+															# this is just making a copy of the previous capsules for each
+															# capsule in this layer, shape (batch)x1152x(num_caps)x8
 
-		x = torch.stack([input]*self.num_caps, dim=2)	# repeat each capsule (num_caps) times along dim=2
-														# this is just making a copy of the previous capsules for each
-														# capsule in this layer, shape (batch)x1152x(num_caps)x8
-
-		x = x.unsqueeze(4) # add an axis at dim=4, shape (batch)x1152x10x8x1
+		u = u.unsqueeze(4) # add an axis at dim=4, shape (batch)x1152x10x8x1
 
 		W = torch.cat([self.W] * bs, dim=0) # repeat set of weights for each batch and concat along dim=0
 
-		u_hat = torch.matmul(W,x) 	# do matrix multiplication of input capsules by W to get estimates
+		u_hat = torch.matmul(W,u) 	# do matrix multiplication of input capsules by W to get estimates
 									# matrix multiplies along last 2 dimensions, shape (bs)x1152x10x16x1
 
 		b_ij = Variable(torch.zeros(1, self.num_routes, self.num_caps, 1))	# capsule routing coefficient logits
@@ -107,7 +108,7 @@ class DigitCaps(nn.Module):
 				 # calculate cosine similarity of predictions u_hat and current v_j
 				cos_sim = torch.matmul(u_hat.transpose(3,4), torch.cat([v_j]*self.num_routes, dim=1))
 
-				b_ij += cos_sim.squeeze(-1).mean(dim=0, keepdim=True) # add average of cosine similarties for each batch
+				b_ij = b_ij + cos_sim.squeeze(-1).mean(dim=0, keepdim=True) # add average of cosine similarties for each batch
 
 		v_j = v_j.squeeze(1) # remove axis along dim=1
 
@@ -123,7 +124,8 @@ class SimpleDecoder(nn.Module):
 			nn.Linear(512, 1024),
 			nn.ReLU(),
 			nn.Linear(1024, 784),
-			nn.Sigmoid())
+			nn.Sigmoid()
+			)
 
 		self.CUDA = torch.cuda.is_available()
 
@@ -178,6 +180,8 @@ class BaselineCapsNet(nn.Module):
 
 		loss = labels*left + 0.5*(1-labels)*right
 		loss = loss.sum(dim=1).mean()
+
+		return loss
 
 
 	def reconstruct_loss(self, images, reconstruct):
