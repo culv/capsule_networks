@@ -67,6 +67,10 @@ def main():
 
 	capsule_net = BaselineCapsNet()
 
+	if torch.cuda.is_available():
+		capsule_net = capsule_net.cuda()
+
+
 	print(capsule_net)
 
 	print("total parameters:", sum(param.numel() for param in capsule_net.parameters()))
@@ -81,7 +85,9 @@ def main():
 		labels = torch.eye(10).index_select(dim=0, index=labels) # convert from int to one-hot for use in network
 
 		images, labels = Variable(images), Variable(labels)
-
+		if torch.cuda.is_available():
+			images = images.cuda()
+			labels = labels.cuda()
 
 		optimizer.zero_grad() # zero out gradient buffers
 	
