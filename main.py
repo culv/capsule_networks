@@ -96,9 +96,9 @@ def main():
 
 		optimizer.zero_grad() # zero out gradient buffers
 	
-		caps = capsule_net(images, labels)	# forward pass of network
+		caps, r, predict = capsule_net(images, labels)	# forward pass of network
 	
-		loss = capsule_net.total_loss(caps, images, labels) # calculate loss
+		loss = capsule_net.total_loss(caps, images, labels, r) # calculate loss
 
 		loss.backward() # backprop
 
@@ -106,9 +106,9 @@ def main():
 		optimizer.step()
 
 		# print(labels_compare)
-		predict = torch.sqrt( (caps**2).sum(2) )
-		_, predict = predict.max(dim=1)
-		predict = predict.squeeze(-1)
+		# predict = torch.sqrt( (caps**2).sum(2) )
+		# _, predict = predict.max(dim=1)
+		# predict = predict.squeeze(-1)
 		# print(predict)
 
 		acc = labels_compare.eq(predict).float().mean()

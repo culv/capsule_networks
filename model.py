@@ -10,12 +10,13 @@ from torch.autograd import Variable
 
 # squash nonlinearity
 # INPUT:	caps = tensor of capsules
+#           dim = dimension to squash along (default=2)
 # OUTPUT:	caps, but with magnitude<=1 along last dimension using squash linearity
 def squash(caps, dim=2):
-	square_norm = torch.sum(caps**2, dim, keepdim=True) # norm of each capsule
-	norm = torch.sqrt(square_norm)
+	square_norm = torch.sum(caps**2, dim, keepdim=True) # squared norm of each capsule, ||s_j||^2
+	norm = torch.sqrt(square_norm) # ||s_j||
 
-	squashed = (square_norm / (1 + square_norm)) * (caps / norm)
+	squashed = (square_norm / (1 + square_norm)) * (caps / norm) # ( ||s_j||^2 / (1+||s_j||^2) ) * ( s_j / ||s_j||)
 
 	return squashed
 
@@ -50,7 +51,7 @@ class PrimaryCaps(nn.Module):
 	# takes input of convolution kernels that were output by conv layer(s)
 	# produces 1152 8D capsules (per batch example)
 	def forward(self, conv_kernels):
-		u = [self.convs[i](conv_kernels) for i, l in enumerate(self.convs)] # create list of 8 cap dimensions each with shape (batch)x32x6x6
+		u = [conv(conv_kernels) for conv in self.convs] # create list of 8 cap dimensions each with shape (batch)x32x6x6
 		
 		u = torch.stack(u, dim=1) # sticks tensors together along dim=1, shape is (batch)x8x32x6x6
 
@@ -173,26 +174,25 @@ class BaselineCapsNet(nn.Module):
 
 	def forward(self, images, labels):
 		dig_caps = self.digit( self.primary( self.conv(images) ) ) # forward pass of capsules
-		# reconstruct = self.decode(dig_caps, labels) # forward pass of reconstructions
+		reconstruct = self.decode(dig_caps, labels) # forward pass of reconstructions
 
 
 
-		# predict = torch.sqrt((dig_caps**2).sum(2)) # calculate norms of digit capsules (probability of class existence)
+		predict = torch.sqrt((dig_caps**2).sum(2)) # calculate norms of digit capsules (probability of class existence)
 
 
-		# _, predict = predict.max(dim=1) # argmax to get indices of most probable class for each batch
+		_, predict = predict.max(dim=1) # argmax to get indices of most probable class for each batch
 
-		# predict = predict.squeeze(-1) # remove last axis
+		predict = predict.squeeze(-1) # remove last axis
 
 
-		return dig_caps #, reconstruct, predict
+		return dig_caps , reconstruct, predict
 
 	def margin_loss(self, caps, labels):
 		bs = caps.shape[0] # batch size
 
 		# calculate capsule magnitudes
 		v_c = torch.sqrt((caps**2).sum(dim=2, keepdim=True))
-#		print('1st 5 batches capsule magnitudes: ', v_c[0:5])
 
 		m_plus = 0.9
 		m_mins = 0.1
@@ -204,20 +204,11 @@ class BaselineCapsNet(nn.Module):
 
 		left = torch.max(0.9 - v_c, zero).view(bs, -1)**2
 		right = torch.max(v_c - 0.1, zero).view(bs, -1)**2
-#		print(labels[0]*left[0])
-#		print((1-labels[0])*right[0])
-
 
 
 		margin_loss = labels*left + 0.5*(1.0-labels)*right
-#		print(margin_loss.shape)
 		margin_loss = margin_loss.sum(dim=1) # sum loss for each digit cap
-#		print(margin_loss.shape)
 		margin_loss = margin_loss.mean() # average over batch size
-#		print(margin_loss.shape)
-#		sys.exit()
-		
-#		print('margin loss: {}'.format(margin_loss))
 
 		return margin_loss
 
@@ -226,20 +217,17 @@ class BaselineCapsNet(nn.Module):
 		flat_reconstruct = reconstruct.view(reconstruct.shape[0], -1) # convert from (batch)x1x28x28 to (batch)x784
 		flat_images = images.view(images.shape[0], -1) 
 
-#		print('flat reconstruct:', flat_reconstruct)
-
 		err = flat_reconstruct - flat_images
 		squared_err = err**2
 		mse_loss = squared_err.mean()
-#		print('reconstruction loss: {}'.format(mse_loss))
 
 		return mse_loss
 
-	def total_loss(self, caps, images, labels):
+	def total_loss(self, caps, images, labels, reconstruct):
 
 		m_loss = self.margin_loss(caps, labels)
 
-		reconstruct = self.decode(caps, labels)
+#		reconstruct = self.decode(caps, labels)
 		r_loss = self.reconstruct_loss(images, reconstruct)
 
 		loss = m_loss + 0.0005*r_loss
