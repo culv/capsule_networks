@@ -199,7 +199,9 @@ class BaselineCapsNet(nn.Module):
 		loss_lambda = 0.5
 
 		zero = Variable(torch.zeros(1))
-
+		if torch.cuda.is_available():
+			zero = zero.cuda()
+			
 		left = torch.max(0.9 - v_c, zero).view(bs, -1)**2
 		right = torch.max(v_c - 0.1, zero).view(bs, -1)**2
 #		print(labels[0]*left[0])
