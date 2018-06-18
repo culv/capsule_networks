@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-from torchviz import make_dot
+#from torchviz import make_dot
 
 # squash nonlinearity
 # INPUT:	caps = tensor of capsules
@@ -279,9 +279,9 @@ def main():
 	x, lab = Variable(fake_images), Variable(fake_labels)
 	c, r, p = capsule_net(x, lab)
 
-	g = make_dot(r, params=dict(capsule_net.named_parameters()))
-	g.format = 'png'
-	g.render()
+	# g = make_dot(r, params=dict(capsule_net.named_parameters()))
+	# g.format = 'png'
+	# g.render()
 
 	sys.exit()
 
