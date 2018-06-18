@@ -88,6 +88,7 @@ def main():
 		if torch.cuda.is_available():
 			images = images.cuda()
 			labels = labels.cuda()
+			labels_compare = labels_compare.cuda()
 
 		optimizer.zero_grad() # zero out gradient buffers
 	
