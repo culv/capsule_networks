@@ -28,7 +28,9 @@ class VisdomLinePlotter(object):
 			tr['y'].append(new_y[i])
 		self.vis._send({'data': self.trace, 'layout': self.layout, 'win': self.title})
 
+
 ###############################################################################################################
+
 
 def main():
 	PORT = 7777

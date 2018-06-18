@@ -2,9 +2,12 @@ import os
 import sys
 
 import torch
+from torch.optim import Adam
+from torch.autograd import Variable
+
 from torchvision import datasets, transforms
 
-from model
+from model import BaselineCapsNet
 
 
 from tqdm import tqdm # progress meter for loops!		
@@ -13,7 +16,7 @@ import numpy as np
 
 import visdom
 
-BATCH_SIZE = 64
+BATCH_SIZE = 32
 NUM_CLASSES = 10
 NUM_EPOCHS = 50
 PERC_PER_EPOCH = 1 #.25 # percentage of whole training set to run through in an epoch (faster training for debugging)
@@ -49,54 +52,68 @@ def check_visdom(port=7777):
 ###################################################################################################################
 
 def main():
-	pass
-
-
-if __name__ == "__main__":
-	
-
-
-
-
-
+	# load MNIST training set into torch DataLoader
 	train_loader = torch.utils.data.DataLoader(
 		datasets.MNIST(DATA_DIR, train=True, download=True,
 			transform=transforms.Compose([
 				transforms.ToTensor(),
-				transforms.Normalize((0.1307,), (0.3081,))
+#				transforms.Normalize((0.1307,), (0.3081,))
 			])),
 		batch_size = BATCH_SIZE, shuffle=True)
 
 
-	images, labels = next(iter(train_loader))
+#	images, labels = next(iter(train_loader))	# get batch of images/labels
+
+
+	capsule_net = BaselineCapsNet()
+
+	print(capsule_net)
+
+	print("total parameters:", sum(param.numel() for param in capsule_net.parameters()))
+
+
+	optimizer = Adam(capsule_net.parameters())
+
+
+	capsule_net.train()
+	for it, (images, labels) in enumerate(train_loader):
+		labels_compare = labels # hold onto labels in int form for comparing accuracy
+		labels = torch.eye(10).index_select(dim=0, index=labels) # convert from int to one-hot for use in network
+
+		images, labels = Variable(images), Variable(labels)
+
+
+		optimizer.zero_grad() # zero out gradient buffers
+	
+		caps = capsule_net(images, labels)	# forward pass of network
+	
+		loss = capsule_net.total_loss(caps, images, labels) # calculate loss
+
+		loss.backward() # backprop
+
+
+		optimizer.step()
+
+		print(labels_compare)
+		predict = torch.sqrt( (caps**2).sum(2) )
+		_, predict = predict.max(dim=1)
+		predict = predict.squeeze(-1)
+		print(predict)
+
+		acc = labels_compare.eq(predict).float().mean()
+
+
+		print('[iter {}] train loss: {} | train acc: {}'.format(it, loss, acc))
+
+
+		# if it == 5:
+		# 	sys.exit()
+
+
+if __name__ == "__main__":
+	main()	
 
 
 
 
-
-	sys.exit()
-
-	iter = 0
-	for images, labels in train_loader:
-
-
-		iter += 1
-
-
-	# check if GPU is available
-	cuda = check_gpu()	
-
-
-	if cuda:
-		model.cuda()
- 
-
-	print("# parameters:", sum(param.numel() for param in model.parameters()))
-
-
-
-
-
-
-	capsule_loss = CapsuleLoss()
 
