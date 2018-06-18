@@ -174,15 +174,12 @@ class BaselineCapsNet(nn.Module):
 
 	def forward(self, images, labels):
 		dig_caps = self.digit( self.primary( self.conv(images) ) ) # forward pass of capsules
+
 		reconstruct = self.decode(dig_caps, labels) # forward pass of reconstructions
 
+		v_c_sq = (dig_caps**2).sum(2) # calculate squared norms of digit capsules (probability of class existence, squared)
 
-
-		predict = torch.sqrt((dig_caps**2).sum(2)) # calculate norms of digit capsules (probability of class existence)
-
-
-		_, predict = predict.max(dim=1) # argmax to get indices of most probable class for each batch
-
+		_, predict = v_c_sq.max(dim=1) # argmax to get indices of most probable class for each batch
 		predict = predict.squeeze(-1) # remove last axis
 
 
@@ -202,8 +199,8 @@ class BaselineCapsNet(nn.Module):
 		if torch.cuda.is_available():
 			zero = zero.cuda()
 
-		left = torch.max(0.9 - v_c, zero).view(bs, -1)**2
-		right = torch.max(v_c - 0.1, zero).view(bs, -1)**2
+		left = F.relu(0.9 - v_c).view(bs, -1)**2 #torch.max(0.9 - v_c, zero).view(bs, -1)**2
+		right = F.relu(v_c - 0.1).view(bs, -1)**2 #torch.max(v_c - 0.1, zero).view(bs, -1)**2
 
 
 		margin_loss = labels*left + 0.5*(1.0-labels)*right
@@ -225,13 +222,10 @@ class BaselineCapsNet(nn.Module):
 
 	def total_loss(self, caps, images, labels, reconstruct):
 
-		m_loss = self.margin_loss(caps, labels)
+		m_loss = self.margin_loss(caps, labels) # margin loss
+		r_loss = self.reconstruct_loss(images, reconstruct) # reconstruction loss
 
-#		reconstruct = self.decode(caps, labels)
-		r_loss = self.reconstruct_loss(images, reconstruct)
-
-		loss = m_loss + 0.0005*r_loss
-
+		loss = m_loss + 0.0005*r_loss # total loss
 
 		return loss
 
