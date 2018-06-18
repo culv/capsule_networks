@@ -17,6 +17,10 @@ import numpy as np
 import visdom
 
 BATCH_SIZE = 32
+
+if torch.cuda.is_available():
+	BATCH_SIZE = 128
+
 NUM_CLASSES = 10
 NUM_EPOCHS = 50
 PERC_PER_EPOCH = 1 #.25 # percentage of whole training set to run through in an epoch (faster training for debugging)

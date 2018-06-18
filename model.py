@@ -57,7 +57,7 @@ class PrimaryCaps(nn.Module):
 		u = u.view(u.shape[0], self.cap_size, -1) # reshape tensor to be [bs, 8, 1152]
 		u = u.transpose(1,2) # transpose to [bs, 1152, 8]
 
-		u = squash(u, dim=1) # 	WHY ALONG DIM 1???? squash nonlinearity to give capsules magnitude<=1 along last dimension
+		u = squash(u, dim=2) # 	WHY ALONG DIM 1???? squash nonlinearity to give capsules magnitude<=1 along last dimension
 		return u
 
 
@@ -201,7 +201,7 @@ class BaselineCapsNet(nn.Module):
 		zero = Variable(torch.zeros(1))
 		if torch.cuda.is_available():
 			zero = zero.cuda()
-			
+
 		left = torch.max(0.9 - v_c, zero).view(bs, -1)**2
 		right = torch.max(v_c - 0.1, zero).view(bs, -1)**2
 #		print(labels[0]*left[0])
