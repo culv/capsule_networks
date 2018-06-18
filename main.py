@@ -105,11 +105,11 @@ def main():
 
 		optimizer.step()
 
-		print(labels_compare)
+		# print(labels_compare)
 		predict = torch.sqrt( (caps**2).sum(2) )
 		_, predict = predict.max(dim=1)
 		predict = predict.squeeze(-1)
-		print(predict)
+		# print(predict)
 
 		acc = labels_compare.eq(predict).float().mean()
 
