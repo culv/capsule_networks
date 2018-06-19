@@ -16,12 +16,15 @@ import numpy as np
 
 import utils
 
+import matplotlib as mpl
+mpl.use('TkAgg') # use TkAgg backend to avoid segmentation fault
+import matplotlib.pyplot as plt
 
 BATCH_SIZE = 32
 LOG_FREQ = 1
 
 if torch.cuda.is_available():
-	BATCH_SIZE = 128
+	BATCH_SIZE = 64
 	LOG_FREQ = 20
 
 NUM_CLASSES = 10
@@ -45,8 +48,7 @@ def main():
 	train_loader = torch.utils.data.DataLoader(
 		datasets.MNIST(DATA_DIR, train=True, download=True,
 			transform=transforms.Compose([
-				transforms.ToTensor(),
-				transforms.Normalize((0.1307,), (0.3081,))
+				transforms.ToTensor()
 			])),
 		batch_size = BATCH_SIZE, shuffle=True)
 
@@ -74,8 +76,6 @@ def main():
 
 	# create Visdom line plot for training loss
 	loss_log = utils.VisdomLinePlotter(vis, color='orange', title='Training Loss', ylabel='loss', xlabel='iters', linelabel='total')
-	loss_log.add_new(color='blue', linelabel='margin')
-	loss_log.add_new(color='red', linelabel='recon')
 
 	# create Visdom line plot for training accuracy
 	train_acc_log = utils.VisdomLinePlotter(vis, color='red', title='Training Accuracy', ylabel='accuracy (%)',
@@ -85,6 +85,11 @@ def main():
 	# for testing accuracy
 	test_acc_log = utils.VisdomLinePlotter(vis, color='red', title='Testing Accuracy', ylabel='accuracy (%)',
 								xlabel='iters', linelabel='base CapsNet')
+
+
+	# for ground truth images and reconstructions
+	ground_truth_image_log = utils.VisdomImagePlotter(vis, caption='Ground Truth')
+	reconstructs_log = utils.VisdomImagePlotter(vis, caption='Reconstructions')
 
 
 	capsule_net.train()
@@ -123,13 +128,20 @@ def main():
 
 
 			if global_it%LOG_FREQ==0 and utils.check_vis(vis):
-					loss_log.update(global_it, [loss, margin_loss, recon_loss])
-					train_acc_log.update(global_it, [running_acc])
+					loss_log.update(global_it, [loss]) # log loss
+					train_acc_log.update(global_it, [batch_acc]) # log batch accuracy
+
+					ground_truth_grid = utils.batch_to_grid(images) # log ground truth images
+					ground_truth_image_log.update(ground_truth_grid)
+
+					reconstructs_grid = utils.batch_to_grid(recons.detach()) # log reconstructed images (must detach first)
+					reconstructs_log.update(reconstructs_grid)
 
 			global_it += 1
 
 
-		print('[Epoch {}] train loss: {} | train acc: {} | batch acc: {}'.format(epoch, loss, running_acc, batch_acc))
+		print('[Epoch {}] train loss: {} | epoch average acc: {} | batch acc: {}'.format(
+			epoch, loss, running_acc, batch_acc, running_acc))
 
 if __name__ == "__main__":
 	main()
