@@ -55,11 +55,11 @@ class PrimaryCaps(nn.Module):
 		
 		u = torch.stack(u, dim=1) # sticks tensors together along dim=1, shape is (batch)x8x32x6x6
 
-		u = u.view(u.shape[0], -1, self.cap_size) # reshape tensor to be [bs, 1152, 8]
+		u = u.view(u.shape[0], self.cap_size, -1) # reshape tensor to be [bs, 8, 1152]
 #		u = u.transpose(1,2) # transpose to [bs, 1152, 8]
 
-		u = squash(u, dim=2) # 	WHY ALONG DIM 1???? squash nonlinearity to give capsules magnitude<=1 along last dimension
-		return u
+		u = squash(u, dim=1) # 	WHY ALONG DIM 1???? squash nonlinearity to give capsules magnitude<=1 along last dimension
+		return u.transpose(1,2)
 
 
 # digit capsule layer (10 16D capsules whose magnitude determines the probability that digit
