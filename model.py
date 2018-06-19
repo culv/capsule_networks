@@ -55,10 +55,10 @@ class PrimaryCaps(nn.Module):
 		
 		u = torch.stack(u, dim=1) # sticks tensors together along dim=1, shape is (batch)x8x32x6x6
 
-		u = u.view(u.shape[0], self.cap_size, -1) # reshape tensor to be [bs, 8, 1152]
-		u = u.transpose(1,2) # transpose to [bs, 1152, 8]
+		u = u.view(u.shape[0], -1, self.cap_size) # reshape tensor to be [bs, 1152, 8]
+#		u = u.transpose(1,2) # transpose to [bs, 1152, 8]
 
-		u = squash(u, dim=1) # 	WHY ALONG DIM 1???? squash nonlinearity to give capsules magnitude<=1 along last dimension
+		u = squash(u, dim=2) # 	WHY ALONG DIM 1???? squash nonlinearity to give capsules magnitude<=1 along last dimension
 		return u
 
 
@@ -109,7 +109,7 @@ class DigitCaps(nn.Module):
 
 			s_j = (c_ij * u_hat).sum(dim=1, keepdim=True) # calculate weighted sum for each capsule, shape=[(bs), 1, 10, 16, 1]
 
-			v_j = squash(s_j, dim=2) # perform squash vector nonlinearity, shape=[bs, 1, 10, 16, 1]
+			v_j = squash(s_j, dim=3) # perform squash vector nonlinearity, shape=[bs, 1, 10, 16, 1]
 
 
 			if it < self.num_routing_it:
