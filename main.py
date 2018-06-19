@@ -129,7 +129,7 @@ def main():
 			global_it += 1
 
 
-			print('[Epoch {}] train loss: {} | train acc: {} | batch acc: {}'.format(epoch, loss, running_acc, batch_acc))
+		print('[Epoch {}] train loss: {} | train acc: {} | batch acc: {}'.format(epoch, loss, running_acc, batch_acc))
 
 if __name__ == "__main__":
 	main()
