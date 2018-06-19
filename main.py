@@ -131,11 +131,13 @@ def main():
 					loss_log.update(global_it, [loss]) # log loss
 					train_acc_log.update(global_it, [batch_acc]) # log batch accuracy
 
+					if CUDA: # send stuff back to CPU if necessary
+						recons = recons.cpu()
+						images = images.cpu()
+
 					ground_truth_grid = utils.batch_to_grid(images) # log ground truth images
 					ground_truth_image_log.update(ground_truth_grid)
 
-					if CUDA: # send back to CPU if necessary
-						recons = recons.cpu()
 					reconstructs_grid = utils.batch_to_grid(recons.detach()) # log reconstructed images (must detach first)
 					reconstructs_log.update(reconstructs_grid)
 
