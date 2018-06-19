@@ -134,6 +134,8 @@ def main():
 					ground_truth_grid = utils.batch_to_grid(images) # log ground truth images
 					ground_truth_image_log.update(ground_truth_grid)
 
+					if CUDA: # send back to CPU if necessary
+						recons = recons.cpu()
 					reconstructs_grid = utils.batch_to_grid(recons.detach()) # log reconstructed images (must detach first)
 					reconstructs_log.update(reconstructs_grid)
 
