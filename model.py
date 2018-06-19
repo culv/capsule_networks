@@ -65,12 +65,13 @@ class PrimaryCaps(nn.Module):
 # digit capsule layer (10 16D capsules whose magnitude determines the probability that digit
 # is present and whose entries determine parameters of that digit)
 class DigitCaps(nn.Module):
-	def __init__(self, num_caps=10, num_routes=32*6**2, caps_in=8, caps_dim=16):
+	def __init__(self, num_caps=10, num_routes=32*6**2, caps_in=8, caps_dim=16, num_routing_it=3):
 		super(DigitCaps, self).__init__()
 
 		self.caps_in = caps_in
 		self.num_routes = num_routes
 		self.num_caps = num_caps
+		self.num_routing_it = num_routing_it
 
 		self.W = nn.Parameter(torch.randn(1, num_routes, num_caps, caps_dim, caps_in))
 
@@ -90,17 +91,17 @@ class DigitCaps(nn.Module):
 
 		batch_W = torch.cat([self.W] * bs, dim=0) # repeat weight for each batch example and concat along dim=0
 
-		u_hat = torch.matmul(batch_W,u) 	# do matrix multiplication of input capsules by W to get estimates
-									# matrix multiplies along last 2 dimensions, shape (bs)x1152x10x16x1
+		u_hat = torch.matmul(batch_W,u)	# do matrix multiplication of input capsules by W to get estimates
+										# matrix multiplies along last 2 dimensions, shape (bs)x1152x10x16x1
 
 		b_ij = Variable(torch.zeros(1, self.num_routes, self.num_caps, 1))	# capsule routing coefficient logits
 																			# (i.e. before softmax -> c_ij) shape 1x1152x10x1
+		# if available, use GPU
 		if self.CUDA:
 			b_ij = b_ij.cuda()
 
 		# start Dynamic Routing by Agreement
-		num_it = 3
-		for it in range(num_it):
+		for it in range(self.num_routing_it):
 			c_ij = F.softmax(b_ij, dim=2) # calculate routing coefficients by doing softmax along dim=2
 
 			c_ij = torch.cat([c_ij]*bs, dim=0).unsqueeze(4) # repeat for each batch and stack along dim=0, shape (bs)x1152x10x1
@@ -108,10 +109,10 @@ class DigitCaps(nn.Module):
 
 			s_j = (c_ij * u_hat).sum(dim=1, keepdim=True) # calculate weighted sum for each capsule, shape=[(bs), 1, 10, 16, 1]
 
-			v_j = squash(s_j, dim=3) # perform squash vector nonlinearity, shape=[bs, 1, 10, 16, 1]
+			v_j = squash(s_j, dim=2) # perform squash vector nonlinearity, shape=[bs, 1, 10, 16, 1]
 
 
-			if it < num_it:
+			if it < self.num_routing_it:
 				# calculate cosine similarity of predictions u_hat and current v_j
 				# transpose u_hat from [bs, 1152, 10, 16, 1] to [bs, 1152, 10, 1, 16]
 				# concat 1152 copies of v_j along dim=1, shape=[bs, 1152, 10, 16, 1]
@@ -142,19 +143,20 @@ class SimpleDecoder(nn.Module):
 
 	def forward(self, dig_caps, labels):
 
-		# argmax to get indices of class labels
+		# argmax to get indices of GROUND TRUTH class labels
 		_, labels =	labels.max(dim=1)
 
-
+		# argmax to get indices of longest capsules
 		classes = torch.sqrt((dig_caps**2).sum(2))
 		_, classes = classes.max(dim=1)
 		classes = classes.squeeze(1).data
 
+		# mask all capsules except ground truth (training) or longest (testing)
 		mask = Variable(torch.eye(10)) # mask all DigitCaps except for correct class
 		if self.CUDA:
 			mask = mask.cuda()
 
-		mask = mask.index_select(dim=0, index=classes)
+		mask = mask.index_select(dim=0, index=labels)
 
 		# reconstruct images based on DigitCaps
 		reconstruct = self.reconstruction( (dig_caps*mask[:,:,None,None]).view(dig_caps.shape[0], -1))
@@ -163,9 +165,16 @@ class SimpleDecoder(nn.Module):
 		return reconstruct # return reconstructions and one-hots of predicted classes
 
 class BaselineCapsNet(nn.Module):
-	def __init__(self):
+	def __init__(self, m_plus=0.9, m_minus=0.1, loss_lambda=0.5, reconstruction_lambda=0.0005):
 		super(BaselineCapsNet, self).__init__()
 
+		# loss function hyperparameters
+		self.m_plus = m_plus
+		self.m_minus = m_minus
+		self.loss_lambda = loss_lambda
+		self.reconstruction_lambda = reconstruction_lambda
+
+		# network architecture
 		self.conv = ConvNet()
 		self.primary = PrimaryCaps()
 		self.digit = DigitCaps()
@@ -188,22 +197,15 @@ class BaselineCapsNet(nn.Module):
 	def margin_loss(self, caps, labels):
 		bs = caps.shape[0] # batch size
 
-		# calculate capsule magnitudes
+		# calculate capsule magnitudes (probabilities)
 		v_c = torch.sqrt((caps**2).sum(dim=2, keepdim=True))
 
-		m_plus = 0.9
-		m_mins = 0.1
-		loss_lambda = 0.5
 
-		zero = Variable(torch.zeros(1))
-		if torch.cuda.is_available():
-			zero = zero.cuda()
-
-		left = F.relu(0.9 - v_c).view(bs, -1)**2 #torch.max(0.9 - v_c, zero).view(bs, -1)**2
-		right = F.relu(v_c - 0.1).view(bs, -1)**2 #torch.max(v_c - 0.1, zero).view(bs, -1)**2
+		left = F.relu(self.m_plus - v_c).view(bs, -1)**2 #torch.max(0.9 - v_c, zero).view(bs, -1)**2
+		right = F.relu(v_c - self.m_minus).view(bs, -1)**2 #torch.max(v_c - 0.1, zero).view(bs, -1)**2
 
 
-		margin_loss = labels*left + 0.5*(1.0-labels)*right
+		margin_loss = labels*left + self.loss_lambda*(1.0-labels)*right
 		margin_loss = margin_loss.sum(dim=1) # sum loss for each digit cap
 		margin_loss = margin_loss.mean() # average over batch size
 
@@ -225,9 +227,9 @@ class BaselineCapsNet(nn.Module):
 		m_loss = self.margin_loss(caps, labels) # margin loss
 		r_loss = self.reconstruct_loss(images, reconstruct) # reconstruction loss
 
-		loss = m_loss + 0.0005*r_loss # total loss
+		loss = m_loss + self.reconstruction_lambda*r_loss # total loss
 
-		return loss
+		return loss, m_loss, self.reconstruction_lambda*r_loss
 
 
 # calculate the number of trainable parameters in a model
