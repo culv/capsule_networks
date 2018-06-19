@@ -1,4 +1,5 @@
 from visdom import Visdom
+import torch
 import time
 
 class VisdomLinePlotter(object):
@@ -28,6 +29,23 @@ class VisdomLinePlotter(object):
 			tr['y'].append(new_y[i])
 		self.vis._send({'data': self.trace, 'layout': self.layout, 'win': self.title})
 
+# check if CUDA GPU is available
+def check_gpu():
+	# check if GPU is available
+	cuda = torch.cuda.is_available()
+	if cuda:
+		print('GPU available - will default to using GPU')
+	else:
+		print('GPU unavailable - will default to using CPU')		
+	return cuda
+
+# check if Visdom server is available
+def check_vis(vis):
+	return vis.check_connection()
+
+# start Visdom server
+def start_vis(port=7777):
+	return Visdom(port=port)
 
 ###############################################################################################################
 
