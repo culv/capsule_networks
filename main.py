@@ -14,18 +14,20 @@ from tqdm import tqdm # progress meter for loops!
 
 import numpy as np
 
-import visdom
+import utils
+
 
 BATCH_SIZE = 32
+LOG_FREQ = 1
 
 if torch.cuda.is_available():
 	BATCH_SIZE = 128
+	LOG_FREQ = 20
 
 NUM_CLASSES = 10
-NUM_EPOCHS = 50
-PERC_PER_EPOCH = 1 #.25 # percentage of whole training set to run through in an epoch (faster training for debugging)
+NUM_EPOCHS = 30
 NUM_ROUTING_ITERATIONS = 3
-PORT = 7777 # localhost port for Visdom server
+
 
 
 # denote data directory and create it if necessary
@@ -36,23 +38,6 @@ if not os.path.exists(DATA_DIR):
 
 
 
-def check_gpu():
-	# check if GPU is available
-	cuda = torch.cuda.is_available()
-	if cuda:
-		print('GPU available - will default to using GPU')
-	else:
-		print('GPU unavailable - will default to using CPU')		
-	return cuda
-
-def check_visdom(port=7777):
-	# check if Visdom server is available
-	if visdom.Visdom(port=PORT).check_connection():
-		print('Visdom server is online - will log data ')
-	else:
-		print('Visdom server is offline - will not log data')
-
-
 ###################################################################################################################
 
 def main():
@@ -61,64 +46,93 @@ def main():
 		datasets.MNIST(DATA_DIR, train=True, download=True,
 			transform=transforms.Compose([
 				transforms.ToTensor(),
-#				transforms.Normalize((0.1307,), (0.3081,))
+				transforms.Normalize((0.1307,), (0.3081,))
 			])),
 		batch_size = BATCH_SIZE, shuffle=True)
 
 
-#	images, labels = next(iter(train_loader))	# get batch of images/labels
-
-
 	capsule_net = BaselineCapsNet()
-
-	if torch.cuda.is_available():
-		capsule_net = capsule_net.cuda()
-
-
 	print(capsule_net)
-
 	print("total parameters:", sum(param.numel() for param in capsule_net.parameters()))
+
+	CUDA = utils.check_gpu()
+	vis = utils.start_vis()
+
+	# check if Visdom server is available
+	if utils.check_vis(vis):
+		print('Visdom server is online - will log data ')
+	else:
+		print('Visdom server is offline - will not log data')
+
+
+	if CUDA:
+		capsule_net = capsule_net.cuda()
 
 
 	optimizer = Adam(capsule_net.parameters())
 
 
+	# create Visdom line plot for training loss
+	loss_log = utils.VisdomLinePlotter(vis, color='orange', title='Training Loss', ylabel='loss', xlabel='iters', linelabel='total')
+	loss_log.add_new(color='blue', linelabel='margin')
+	loss_log.add_new(color='red', linelabel='recon')
+
+	# create Visdom line plot for training accuracy
+	train_acc_log = utils.VisdomLinePlotter(vis, color='red', title='Training Accuracy', ylabel='accuracy (%)',
+								xlabel='iters', linelabel='base CapsNet')
+
+
+	# for testing accuracy
+	test_acc_log = utils.VisdomLinePlotter(vis, color='red', title='Testing Accuracy', ylabel='accuracy (%)',
+								xlabel='iters', linelabel='base CapsNet')
+
+
 	capsule_net.train()
-	for it, (images, labels) in enumerate(train_loader):
-		labels_compare = labels # hold onto labels in int form for comparing accuracy
-		labels = torch.eye(10).index_select(dim=0, index=labels) # convert from int to one-hot for use in network
+	global_it = 0
+	running_acc_sum = 0
 
-		images, labels = Variable(images), Variable(labels)
-		if torch.cuda.is_available():
-			images = images.cuda()
-			labels = labels.cuda()
-			labels_compare = labels_compare.cuda()
+	for epoch in range(NUM_EPOCHS):
+		for it, (images, labels) in enumerate(tqdm(train_loader)):
 
-		optimizer.zero_grad() # zero out gradient buffers
-	
-		caps, recons, predicts = capsule_net(images, labels)	# forward pass of network
-	
-		loss, margin_loss, recon_loss = capsule_net.total_loss(caps, images, labels, recons) # calculate loss
+			labels_compare = labels # hold onto labels in int form for comparing accuracy
+			labels = torch.eye(10).index_select(dim=0, index=labels) # convert from int to one-hot for use in network
 
-		loss.backward() # backprop
+			images, labels = Variable(images), Variable(labels)
+
+			if CUDA:
+				images = images.cuda()
+				labels = labels.cuda()
+				labels_compare = labels_compare.cuda()
+
+			optimizer.zero_grad() # zero out gradient buffers
+		
+			caps, recons, predicts = capsule_net(images, labels)	# forward pass of network
+		
+			loss, margin_loss, recon_loss = capsule_net.total_loss(caps, images, labels, recons) # calculate loss
+
+			loss.backward() # backprop
+
+			optimizer.step()
+
+			batch_acc = float(labels_compare.eq(predicts).float().mean())
+
+			running_acc_sum += batch_acc
+			running_acc = running_acc_sum/(global_it+1)
+
+			loss, margin_loss, recon_loss = float(loss), float(margin_loss), float(recon_loss)
 
 
-		optimizer.step()
+			if global_it%LOG_FREQ==0 and utils.check_vis(vis):
+					loss_log.update(global_it, [loss, margin_loss, recon_loss])
+					train_acc_log.update(global_it, [running_acc])
+
+			global_it += 1
 
 
-		acc = labels_compare.eq(predicts).float().mean()
-
-
-		print('[iter {}] train loss: {} | train acc: {}'.format(it, loss, acc))
-
-
-		# if it == 5:
-		# 	sys.exit()
-
+			print('[Epoch {}] train loss: {} | train acc: {} | batch acc: {}'.format(epoch, loss, running_acc, batch_acc))
 
 if __name__ == "__main__":
-	main()	
-
+	main()
 
 
 

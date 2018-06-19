@@ -51,15 +51,15 @@ class PrimaryCaps(nn.Module):
 	# takes input of convolution kernels that were output by conv layer(s)
 	# produces 1152 8D capsules (per batch example)
 	def forward(self, conv_kernels):
+		bs = conv_kernels.shape[0]
 		u = [conv(conv_kernels) for conv in self.convs] # create list of 8 cap dimensions each with shape (batch)x32x6x6
 		
 		u = torch.stack(u, dim=1) # sticks tensors together along dim=1, shape is (batch)x8x32x6x6
 
-		u = u.view(u.shape[0], self.cap_size, -1) # reshape tensor to be [bs, 8, 1152]
-#		u = u.transpose(1,2) # transpose to [bs, 1152, 8]
+		u = u.view(u.shape[0], -1, self.cap_size)#, -1) # reshape tensor to be [bs, 1152, 8]
 
 		u = squash(u, dim=1) # 	WHY ALONG DIM 1???? squash nonlinearity to give capsules magnitude<=1 along last dimension
-		return u.transpose(1,2)
+		return u
 
 
 # digit capsule layer (10 16D capsules whose magnitude determines the probability that digit
