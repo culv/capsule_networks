@@ -149,11 +149,6 @@ def main():
 
 			capsule_net.save_model(optimizer, epoch)
 
-			if global_it%LOG_FREQ==0:
-				break
-
-		break
-
 		print('[Epoch {}] train loss: {} | epoch average acc: {} | batch acc: {}'.format(
 			epoch, loss, running_acc, batch_acc, running_acc))
 

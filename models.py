@@ -84,8 +84,8 @@ class BaseNN(nn.Module):
 		state = dict(epoch=epoch, state_dict=self.state_dict(), optimizer=optimizer.state_dict())
 
 
-		# Save the model in save_dir with fename {save_name}_{epoch}E_{iteration}it.pth
-		fname = '{}_{}.pt'.format(self.save_name, time.time())#epoch)
+		# Save the model in save_dir with fname {save_name}_{epoch}.pt
+		fname = '{}_{}.pt'.format(self.save_name, epoch)
 		save_here = os.path.join(self.save_path, fname)
 
 		torch.save(state, save_here)
@@ -93,11 +93,17 @@ class BaseNN(nn.Module):
 		print('[Epoch {}] Saved model to {}'.format(epoch, fname))
 
 	def load_model(self):
-		"""Load the last model saved in save_dir"""
+		"""Load the last model saved in save_dir
+
+		Returns:
+			epoch: How many epochs the loaded model had been trained
+			model_state: The architecture and parameters of the model
+			optimizer: The state of the optimizer
+		"""
 
 		# Get list of all files in save_dir
 		files_list = glob.glob( os.path.join(self.save_path, '*') )
-		print(files_list)
+
 		# Get most recently saved
 		last_fname = max(files_list, key=os.path.getctime)
 
@@ -105,12 +111,19 @@ class BaseNN(nn.Module):
 		last = torch.load(last_fname)
 		print('Loaded model from {}'.format(last_fname))
 
-		return last['epoch'], last['state_dict'], last['optimizer']
+		epoch = last['epoch']
+		model_state = last['state_dict']
+		optimizer = last['optimizer']
+
+		return epoch, model_state, optimizer
 
 
 
 class BaselineCapsNet(BaseNN):
 	"""Basic Capsule Net from 'Dynamic Routing Between Capsules' by S. Sabour et al.
+
+	*Inherits from parent class BaseNN
+	
 
 	1) Input is MNIST images
 	2) Pass images through initial conv layer
@@ -119,10 +132,8 @@ class BaselineCapsNet(BaseNN):
 	5) Reconstruct images based on digit capsule parameters
 
 	Args:
-		m_plus: 				Hyperparameter for loss function
-		m_minus: 	 			"		"		"		"		"
-		loss_lambda: 			"		"		"		"		"
-		reconstruction_lambda:	"		"		"		"		"
+		m_plus, m_mins, loss_lambda, reconstruction_lambda:	Hyperparameters for loss function
+		save_name: Name to save models under
 
 	Attributes:
 		* A loss function object
@@ -199,7 +210,15 @@ class BaselineCapsNet(BaseNN):
 		return total_loss, m_loss, r_loss
 
 
-"""------------------Main function, just used for debugging---------------------"""
+# TODO
+class DCNet(BaseNN):
+	pass
+
+class DCNet_pp(BaseNN):
+	pass
+
+
+# Main function, just used for debugging
 def main():
 	fake_images = torch.randn([2,1,28,28])
 	fake_labels = torch.zeros([2,10])

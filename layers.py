@@ -79,7 +79,9 @@ class ConvNet(nn.Module):
 
 		return self.conv(images)
 
-
+# TODO
+class DenseNet(nn.Module):
+	pass
 
 class PrimaryCaps(nn.Module):
 	"""PrimaryCaps layer from 'Dynamic Routing Between Capsules' by S. Sabour et al.
@@ -270,6 +272,10 @@ class DigitCaps(nn.Module):
 
 		return v_j
 
+# TODO
+class StackedDecoder(nn.Module):
+	pass
+
 
 class SimpleDecoder(nn.Module):
 	"""Simple decoder from 'Dynamic Routing Between Capsules' by S. Sabour et al.
@@ -440,7 +446,7 @@ class CapsLoss(object):
 		return self.margin_loss_val + self.reconstruction_lambda*self.reconstruction_loss_val
 
 
-"""------------------Main function, just used for debugging---------------------"""
+# Main function, just used for debugging
 def main():
 	cnn = ConvNet()
 	primary_caps = PrimaryCaps()
