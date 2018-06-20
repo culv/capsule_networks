@@ -7,7 +7,7 @@ from torch.autograd import Variable
 
 from torchvision import datasets, transforms
 
-from model import BaselineCapsNet
+from models import BaselineCapsNet
 
 
 from tqdm import tqdm # progress meter for loops!		
@@ -25,7 +25,7 @@ LOG_FREQ = 1
 
 if torch.cuda.is_available():
 	BATCH_SIZE = 64
-	LOG_FREQ = 20
+	LOG_FREQ = 100
 
 NUM_CLASSES = 10
 NUM_EPOCHS = 30
@@ -38,8 +38,6 @@ script_dir = os.path.dirname(os.path.realpath(__file__))
 DATA_DIR = os.path.join(script_dir, 'data')
 if not os.path.exists(DATA_DIR):
 	os.makedirs(DATA_DIR)
-
-
 
 ###################################################################################################################
 
@@ -55,7 +53,7 @@ def main():
 
 	capsule_net = BaselineCapsNet()
 	print(capsule_net)
-	print("total parameters:", sum(param.numel() for param in capsule_net.parameters()))
+	print("total parameters:", utils.get_num_params(capsule_net))
 
 	CUDA = utils.check_gpu()
 	vis = utils.start_vis()
@@ -113,7 +111,7 @@ def main():
 		
 			caps, recons, predicts = capsule_net(images, labels)	# forward pass of network
 		
-			loss, margin_loss, recon_loss = capsule_net.total_loss(caps, images, labels, recons) # calculate loss
+			loss, margin_loss, recon_loss = capsule_net.get_loss(caps, images, labels, recons) # calculate loss
 
 			loss.backward() # backprop
 
@@ -126,6 +124,7 @@ def main():
 
 			loss, margin_loss, recon_loss = float(loss), float(margin_loss), float(recon_loss)
 
+			print(loss)
 
 			if global_it%LOG_FREQ==0 and utils.check_vis(vis):
 					loss_log.update(global_it, [loss]) # log loss
