@@ -10,15 +10,15 @@ from torchvision import datasets, transforms
 from models import BaselineCapsNet
 
 
-from tqdm import tqdm # progress meter for loops!		
-
-import numpy as np
+from tqdm import tqdm # progress meter for loops!
 
 import utils
 
 import matplotlib as mpl
 mpl.use('TkAgg') # use TkAgg backend to avoid segmentation fault
 import matplotlib.pyplot as plt
+
+
 
 BATCH_SIZE = 32
 LOG_FREQ = 1

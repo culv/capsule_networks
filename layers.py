@@ -1,3 +1,13 @@
+# Author: Culver McWhirter
+
+"""Library for capsule layers
+
+Contains class definitions for different layers of Capsule Networks, Dense Capsule Nets (DCNet)
+and Diverse Capsule Nets (DCNet++)
+
+Also contains other important capsule network aspects like loss functions and routing algorithms
+"""
+
 import os
 import sys
 
@@ -38,9 +48,13 @@ class ConvNet(nn.Module):
 		stride: Stride of conv filters (default stride=1).
 		pad: Input padding (default pad=0).
 
-	Returns:
-		conv_kernels: The outputs of convolutional layer after Conv2d() and ReLU(). 
+	Attributes:
+		conv: A single convolutional layer with ReLU nonlinearity
+
+	Methods:
+		forward(): Forward pass
 	"""
+
 	def __init__(self, c_in=1, c_out=256, kernel=9, stride=1, pad=0):
 		super(ConvNet, self).__init__()
 
@@ -51,7 +65,9 @@ class ConvNet(nn.Module):
 
 	# Forward pass of ConvNet.
 	def forward(self, images):
-		# For baseline Capsule Net with MNIST, shape is [batch_size, 256, 20, 20]
+		"""Forward pass. Returns the outputs of layer after Conv2d() and ReLU().
+		For baseline Capsule Net with MNIST, shape is [batch_size, 256, 20, 20]"""
+
 		return self.conv(images)
 
 
@@ -73,9 +89,14 @@ class PrimaryCaps(nn.Module):
 		stride: Stride of convolution (default stride=2).
 		pad: Padding to input
 
-	Returns:
-		u: Primary capsules.
+	Attributes:
+		* cap_size
+		convs: List of conv filters, each one is used to generate a capsule feature
+
+	Methods:
+		forward(): Forward pass
 	"""
+
 	def __init__(self, cap_size=8, c_in=256, c_out=32, kernel=9, stride=2, pad=0):
 		super(PrimaryCaps, self).__init__()
 
@@ -86,9 +107,18 @@ class PrimaryCaps(nn.Module):
 			nn.Conv2d(c_in, c_out, kernel, stride=stride, padding=pad) for i in range(cap_size)
 			])
 
-	# Forward pass of PrimaryCaps
 	def forward(self, conv_kernels):
-		# For baseline Capsule Net with MNIST, conv_kernels has shape [batch_size, 256, 20, 20].
+		"""Forward pass of PrimaryCaps layer
+
+		Converts conv kernels into capsules using convolutions, reshaping, and squash nonlinearity.
+		For baseline Capsule Net with MNIST, conv_kernels has shape [batch_size, 256, 20, 20].
+
+		Args:
+			conv_kernels: Kernel outputs from conv layer
+
+		Returns:
+			u: Tensor of capsules
+		"""
 
 		bs = conv_kernels.shape[0]
 
@@ -127,9 +157,15 @@ class DigitCaps(nn.Module):
 		caps_out_dim: Size of output capsules
 		num_routing_it: Number of iterations for Dynamic Routing
 
-	Returns:
-		v_j: Output capsules
+	Attributes:
+		* all Args
+		* CUDA flag
+		W: Weights for transforming input capsules to predictions of this layer's capsules
+
+	Methods:
+		forward(): Forward network pass
 	"""
+
 	def __init__(self, num_caps=10, num_routes=1152, caps_in_dim=8, caps_out_dim=16, num_routing_it=3):
 		super(DigitCaps, self).__init__()
 
@@ -142,10 +178,19 @@ class DigitCaps(nn.Module):
 
 		self.CUDA = torch.cuda.is_available()
 
-	# Forward pass of DigitCaps layer
 	def forward(self, in_caps):
-		# Can take PrimaryCaps or DigitCaps as input. For baseline Capsule Net, input is PrimaryCaps
-		# with shape [batch_size, 1152, 8]
+		"""Forward pass of DigitCaps layer
+
+		Does affine prediction transformation, Dynamic Routing by Agreement, and squash nonlinearity.
+		Can take PrimaryCaps or DigitCaps as input. For baseline Capsule Net, input is PrimaryCaps
+		with shape [batch_size, 1152, 8]
+
+		Args:
+			in_caps: Capsules from previous layer
+
+		Returns:
+			v_j: Output capsules
+		"""
 
 		bs = in_caps.shape[0]
 
@@ -223,12 +268,18 @@ class SimpleDecoder(nn.Module):
 
 	Args:
 
-	Returns:
-		reconstruct: Reconstructed MNIST images, shape [batch_size, 1, 28, 28]
+	Attributes:
+		* Reconstruction (decoder) network
+		* CUDA flag (is GPU available)
+
+	Methods:
+		forward(): Forward pass
 	"""
+
 	def __init__(self):
 		super(SimpleDecoder, self).__init__()
 
+		# Network
 		self.reconstruction = nn.Sequential(
 			nn.Linear(16*10, 512),
 			nn.ReLU(inplace=True),
@@ -238,14 +289,22 @@ class SimpleDecoder(nn.Module):
 			nn.Sigmoid()
 			)
 
+		# CUDA GPU flag
 		self.CUDA = torch.cuda.is_available()
 
-	# Forward pass of SimpleDecoder
 	def forward(self, dig_caps, labels, train=True):
-		"""Args:
-				dig_caps: Input of DigitCaps from previous layer
-				labels: Ground truth labels
-				train: Whether to mask based on ground truth (training) or longest capsule (testing)
+		"""Forward pass of SimpleDecoder
+
+		Masks capsules based on either ground truth or max length, then attempts to
+		reconstruct image with fully-connected layers
+
+		Args:
+			dig_caps: Input of DigitCaps from previous layer
+			labels: Ground truth labels
+			train: Whether to mask based on ground truth (training) or longest capsule (testing)
+		
+		Returns:
+			reconstruct: Reconstructed image
 		"""
 
 		if train:
@@ -281,9 +340,9 @@ class CapsLoss(object):
 	"""Loss function for CapsNet
 
 	Has two components:
-		1) Margin loss - based on correct class capsule length being larger than some baseline m_plus
+		1) Margin loss - hinge loss based on correct class capsule length being larger than some baseline m_plus
 			and incorrect class capsule lengths being lower than some baseline m_minus
-		2) Reconstruction loss - based on L2 distance between original image and reconstruction
+		2) Reconstruction loss - based on MSE between original images and their reconstructions
 
 	Args:
 		m_plus: Hyperparameter for loss function
@@ -291,6 +350,15 @@ class CapsLoss(object):
 		loss_lambda: Hyperparameter for loss function
 		reconstruction_lambda: Hyperparameter for loss function
 
+	Attributes:
+		* all Args
+		margin_loss_val: Value of the margin loss
+		reconstruction_loss_val: Value of the reconstruction loss
+
+	Methods:
+		margin_loss(): Calculate margin loss for a batch of capsules and ground truth labels
+		reconstruction_loss(): Calculate reconstruction loss for a batch of images and their reconstructions
+		total_loss(): Use margin and reconstruction losses to find total loss
 	"""
 	def __init__(self, m_plus=0.9, m_minus=0.1, loss_lambda=0.5, reconstruction_lambda=0.0005):
 		# Loss function hyperparameters
@@ -305,6 +373,15 @@ class CapsLoss(object):
 
 	# First component: Margin loss
 	def margin_loss(self, caps, labels):
+		"""First loss component: Margin loss
+
+		Args:
+			caps: Final capsules output by capsule network
+			labels: One-hot ground truth labels
+
+		Returns:
+			margin_loss_val: Margin loss for this batch
+		"""
 		bs = caps.shape[0]
 
 		# Calculate capsule magnitudes (probabilities)
@@ -324,19 +401,31 @@ class CapsLoss(object):
 
 		return self.margin_loss_val
 
-	# Second component: Reconstruction loss
+	# Second component: Reconstruction loss (MSE between images and their reconstructions)
 	def reconstruction_loss(self, images, reconstruct):
-		flat_reconstruct = reconstruct.view(reconstruct.shape[0], -1) # convert from (batch)x1x28x28 to (batch)x784
+		"""Second loss component: Reconstruction loss
+
+		Args:
+			images: Images that were input into the network
+			reconstruct: Reconstructions of the images based on capsule parameters
+
+		Returns:
+			reconstruction_loss_val
+
+		"""
+		# Flatten from shape [batch_size, 1, 28, 28] to [batch_size, 784]
+		flat_reconstruct = reconstruct.view(reconstruct.shape[0], -1)
 		flat_images = images.view(images.shape[0], -1) 
 
+		# Calculate mean-squared error
 		err = flat_reconstruct - flat_images
 		squared_err = err**2
 		self.reconstruction_loss_val = squared_err.mean()
 
 		return self.reconstruction_loss_val
 
-	# Total loss
 	def total_loss(self):
+		"""Returns total loss"""
 		return self.margin_loss_val + self.reconstruction_lambda*self.reconstruction_loss_val
 
 
