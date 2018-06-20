@@ -8,6 +8,10 @@ S. Sabour et al.
 Also contains DCNet, and DCNet++ from 'Dense and Diverse Capsule Networks' by 
 S. Phaye et al.
 
+DONE:
+	* Basic CapsNet
+	* Saving & loading models
+
 TODO:
 	* EM routing
 	* DCNet
@@ -16,6 +20,8 @@ TODO:
 
 import os
 import sys
+import glob
+
 
 import torch
 import torch.nn as nn
@@ -27,12 +33,83 @@ from layers import ConvNet, PrimaryCaps, DigitCaps, SimpleDecoder, CapsLoss
 #from torchviz import make_dot
 
 
+class BaseNN(nn.Module):
+	"""BaseNN is a template neural network model that has usefu methods for all
+	other neural network classes that PyTorch doesn't have by default
 
-class BasicModel(nn.Module):
-	pass
+	***NOTE: This is a parent class to be inherited from only, not used***
+
+	Args:
+		save_name: Used as the name of the directory & start of the filenames for saved models
+	
+	Attributes:
+		* Args
+		save_path: Full path to save directory
+
+	Methods:
+		save_model(): Save the model during training
+		load_model(): Load a saved model for testing/evaluation/resuming training
+	"""
+
+	def __init__(self, save_name):
+		super(BaseNN, self).__init__()
+		self.save_name = save_name
+
+		# Check if checkpoints directory and save_dir exists and create it if necessary
+		# (create it in the direcory where this script lives)
+		base_path = os.path.dirname(os.path.realpath(__file__))
+		checkpoint_path = os.path.join(base_path, 'checkpoints')
+		self.save_path = os.path.join(checkpoint_path, self.save_name)
+
+		if not os.path.exists(checkpoint_path):
+
+			os.makedirs(checkpoint_path)
+			print('Created checkpoints dir at {}'.format(checkpoint_path))
+
+			if not os.path.exists(save_path):
+
+				os.makedirs(self.save_path)
+				print('Created checkpoint dir for this model at {}'.format(self.save_path))
 
 
-class BaselineCapsNet(nn.Module):
+	def save_model(self, optimizer, epoch):
+		"""Saves model at a specific point in training
+
+		Args:
+			optimizer: The optimizer being used to train
+			epoch: The current epoch
+		"""
+
+		# Create a dictionary with the current state of the model and optimizer
+		state = dict(epoch=epoch, state_dict=self.state_dict(), optimizer=optimizer.state_dict())
+
+
+		# Save the model in save_dir with fename {save_name}_{epoch}E_{iteration}it.pth
+		fname = '{}_{}.pt'.format(self.save_name, time.time())#epoch)
+		save_here = os.path.join(self.save_path, fname)
+
+		torch.save(state, save_here)
+
+		print('[Epoch {}] Saved model to {}'.format(epoch, fname))
+
+	def load_model(self):
+		"""Load the last model saved in save_dir"""
+
+		# Get list of all files in save_dir
+		files_list = glob.glob( os.path.join(self.save_path, '*') )
+		print(files_list)
+		# Get most recently saved
+		last_fname = max(files_list, key=os.path.getctime)
+
+		# Load model and return epoch, model state, and optimizer state
+		last = torch.load(last_fname)
+		print('Loaded model from {}'.format(last_fname))
+
+		return last['epoch'], last['state_dict'], last['optimizer']
+
+
+
+class BaselineCapsNet(BaseNN):
 	"""Basic Capsule Net from 'Dynamic Routing Between Capsules' by S. Sabour et al.
 
 	1) Input is MNIST images
@@ -56,8 +133,9 @@ class BaselineCapsNet(nn.Module):
 		get_loss(): Calculates loss function for current batch
 	"""
 
-	def __init__(self, m_plus=0.9, m_minus=0.1, loss_lambda=0.5, reconstruction_lambda=0.0005):
-		super(BaselineCapsNet, self).__init__()
+	def __init__(self, m_plus=0.9, m_minus=0.1, loss_lambda=0.5, reconstruction_lambda=0.0005, save_name='BaselineCapsNet'):
+
+		super(BaselineCapsNet, self).__init__(save_name)
 
 		# Loss function
 		self.loss = CapsLoss(m_plus, m_minus, loss_lambda, reconstruction_lambda)

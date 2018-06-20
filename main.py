@@ -27,7 +27,7 @@ mpl.use('TkAgg') # use TkAgg backend to avoid segmentation fault
 import matplotlib.pyplot as plt
 
 BATCH_SIZE = 32
-LOG_FREQ = 1
+LOG_FREQ = 2
 
 if torch.cuda.is_available():
 	BATCH_SIZE = 64
@@ -57,6 +57,7 @@ def main():
 
 
 	capsule_net = BaselineCapsNet()
+
 	print(capsule_net)
 	print("total parameters:", utils.get_num_params(capsule_net))
 
@@ -129,7 +130,6 @@ def main():
 
 			loss, margin_loss, recon_loss = float(loss), float(margin_loss), float(recon_loss)
 
-			print(loss)
 
 			if global_it%LOG_FREQ==0 and utils.check_vis(vis):
 					loss_log.update(global_it, [loss]) # log loss
@@ -147,9 +147,16 @@ def main():
 
 			global_it += 1
 
+			capsule_net.save_model(optimizer, epoch)
+
+			if global_it%LOG_FREQ==0:
+				break
+
+		break
 
 		print('[Epoch {}] train loss: {} | epoch average acc: {} | batch acc: {}'.format(
 			epoch, loss, running_acc, batch_acc, running_acc))
+
 
 if __name__ == "__main__":
 	main()

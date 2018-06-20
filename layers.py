@@ -7,6 +7,9 @@ and Diverse Capsule Nets (DCNet++)
 
 Also contains other important capsule network aspects like loss functions and routing algorithms
 
+DONE:
+	* Basic CapsNet
+
 TODO:
 	* EM routing
 	* DCNet
