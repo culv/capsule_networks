@@ -37,24 +37,25 @@ class BaselineCapsNet(nn.Module):
 
 	1) Input is MNIST images
 	2) Pass images through initial conv layer
-	3) Create primary capsules from conv kernels
+	3) Create primary capsules from conv layer's output kernels
 	4) Create digit capsules from primary capsules
 	5) Reconstruct images based on digit capsule parameters
 
 	Args:
-		m_plus: Hyperparameter for loss function
-		m_minus: Hyperparameter for loss function
-		loss_lambda: Hyperparameter for loss function
-		reconstruction_lambda: Hyperparameter for loss function
+		m_plus: 				Hyperparameter for loss function
+		m_minus: 	 			"		"		"		"		"
+		loss_lambda: 			"		"		"		"		"
+		reconstruction_lambda:	"		"		"		"		"
 
 	Attributes:
-		* Loss function
-		* Network architecture
+		* A loss function object
+		* The network architecture
 
 	Methods:
 		forward(): Forward pass of network
 		get_loss(): Calculates loss function for current batch
 	"""
+
 	def __init__(self, m_plus=0.9, m_minus=0.1, loss_lambda=0.5, reconstruction_lambda=0.0005):
 		super(BaselineCapsNet, self).__init__()
 
@@ -119,8 +120,8 @@ class BaselineCapsNet(nn.Module):
 
 		return total_loss, m_loss, r_loss
 
-##############################################################################################################
 
+"""------------------Main function, just used for debugging---------------------"""
 def main():
 	fake_images = torch.randn([2,1,28,28])
 	fake_labels = torch.zeros([2,10])

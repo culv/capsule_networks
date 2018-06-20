@@ -178,8 +178,8 @@ def get_num_params(model):
 	# Return number of params
 	return sum(np.prod(p.shape) for p in params)
 
-###############################################################################################################
 
+"""------------------Main function, just used for debugging---------------------"""
 def main():
 	PORT = 7777
 

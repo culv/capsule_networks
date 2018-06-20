@@ -45,7 +45,6 @@ DATA_DIR = os.path.join(script_dir, 'data')
 if not os.path.exists(DATA_DIR):
 	os.makedirs(DATA_DIR)
 
-###################################################################################################################
 
 def main():
 	# load MNIST training set into torch DataLoader

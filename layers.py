@@ -29,6 +29,7 @@ def squash(caps, dim=2):
 	Args:
 		caps: Tensor of capsules with shape [batch_size, num_capsules, capsule_dimension].
 	    dim: The dimension (axis) to squash along (default dim=2).
+
 	Returns:
 		Tensor of squashed capsules (has same shape as input).
 	"""
@@ -81,8 +82,8 @@ class PrimaryCaps(nn.Module):
 	"""PrimaryCaps layer from 'Dynamic Routing Between Capsules' by S. Sabour et al.
 
 	1) Takes conv kernels as input
-	2) Performs a convolution on the kernels to produce each capsule feature (one set of
-		convolutions per feature).
+	2) Performs a convolution on the kernels to produce each capsule feature (one
+		convolution operation per feature).
 	3) Reshapes and squashes
 
 	Args:
@@ -96,7 +97,8 @@ class PrimaryCaps(nn.Module):
 
 	Attributes:
 		* cap_size
-		convs: List of conv filters, each one is used to generate a capsule feature
+		convs: List of conv filters, each one is used to generate a capsule feature from the
+			kernel input
 
 	Methods:
 		forward(): Forward pass
@@ -165,7 +167,7 @@ class DigitCaps(nn.Module):
 	Attributes:
 		* all Args
 		* CUDA flag
-		W: Weights for transforming input capsules to predictions of this layer's capsules
+		W: Weight matrices for transforming input capsules to predictions for this layer's capsules
 
 	Methods:
 		forward(): Forward network pass
@@ -181,13 +183,15 @@ class DigitCaps(nn.Module):
 		# All of the weight matrices to get predictions from each input capsule
 		self.W = nn.Parameter(torch.randn(1, num_routes, num_caps, caps_out_dim, caps_in_dim))
 
+		# CUDA flag
 		self.CUDA = torch.cuda.is_available()
 
 	def forward(self, in_caps):
 		"""Forward pass of DigitCaps layer
 
-		Does affine prediction transformation, Dynamic Routing by Agreement, and squash nonlinearity.
-		Can take PrimaryCaps or DigitCaps as input. For baseline Capsule Net, input is PrimaryCaps
+		Does input capsules > prediction transformation > Dynamic Routing by Agreement > squash nonlinearity
+
+		Can take PrimaryCaps OR DigitCaps as input. For baseline Capsule Net, input is PrimaryCaps
 		with shape [batch_size, 1152, 8]
 
 		Args:
@@ -271,8 +275,6 @@ class SimpleDecoder(nn.Module):
 		1) During training, reconstruct the ground truth capsule
 		2) During testing, reconstruct the longest capsule (highest probability prediction)
 
-	Args:
-
 	Attributes:
 		* Reconstruction (decoder) network
 		* CUDA flag (is GPU available)
@@ -301,7 +303,7 @@ class SimpleDecoder(nn.Module):
 		"""Forward pass of SimpleDecoder
 
 		Masks capsules based on either ground truth or max length, then attempts to
-		reconstruct image with fully-connected layers
+		reconstruct image from capsule parameters with fully-connected layers
 
 		Args:
 			dig_caps: Input of DigitCaps from previous layer
@@ -344,7 +346,10 @@ class SimpleDecoder(nn.Module):
 class CapsLoss(object):
 	"""Loss function for CapsNet
 
-	Has two components:
+	From 'Dynamic Routing Between Capsules' by S. Sabour et al, the loss function is a combination of a hinge
+	loss (similar to that of SVM) and a MSE loss
+
+	The two components:
 		1) Margin loss - hinge loss based on correct class capsule length being larger than some baseline m_plus
 			and incorrect class capsule lengths being lower than some baseline m_minus
 		2) Reconstruction loss - based on MSE between original images and their reconstructions
@@ -376,7 +381,6 @@ class CapsLoss(object):
 		self.margin_loss_val = 0
 		self.reconstruction_loss_val = 0
 
-	# First component: Margin loss
 	def margin_loss(self, caps, labels):
 		"""First loss component: Margin loss
 
@@ -406,18 +410,17 @@ class CapsLoss(object):
 
 		return self.margin_loss_val
 
-	# Second component: Reconstruction loss (MSE between images and their reconstructions)
 	def reconstruction_loss(self, images, reconstruct):
 		"""Second loss component: Reconstruction loss
 
 		Args:
-			images: Images that were input into the network
-			reconstruct: Reconstructions of the images based on capsule parameters
+			images: Original images that were input into the network
+			reconstruct: Images reconstructed from capsule parameters
 
 		Returns:
 			reconstruction_loss_val
-
 		"""
+
 		# Flatten from shape [batch_size, 1, 28, 28] to [batch_size, 784]
 		flat_reconstruct = reconstruct.view(reconstruct.shape[0], -1)
 		flat_images = images.view(images.shape[0], -1) 
@@ -434,9 +437,7 @@ class CapsLoss(object):
 		return self.margin_loss_val + self.reconstruction_lambda*self.reconstruction_loss_val
 
 
-##################################################################################################################
-
-
+"""------------------Main function, just used for debugging---------------------"""
 def main():
 	cnn = ConvNet()
 	primary_caps = PrimaryCaps()
