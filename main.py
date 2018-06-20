@@ -1,3 +1,13 @@
+# Author: Culver McWhirter
+
+"""Main script
+
+Contains training and testing loops for different networks
+
+TODO:
+	* add command line argument parsing
+"""
+
 import os
 import sys
 
@@ -8,17 +18,13 @@ from torch.autograd import Variable
 from torchvision import datasets, transforms
 
 from models import BaselineCapsNet
-
+import utils
 
 from tqdm import tqdm # progress meter for loops!
-
-import utils
 
 import matplotlib as mpl
 mpl.use('TkAgg') # use TkAgg backend to avoid segmentation fault
 import matplotlib.pyplot as plt
-
-
 
 BATCH_SIZE = 32
 LOG_FREQ = 1

@@ -6,6 +6,11 @@ Contains class definitions for different layers of Capsule Networks, Dense Capsu
 and Diverse Capsule Nets (DCNet++)
 
 Also contains other important capsule network aspects like loss functions and routing algorithms
+
+TODO:
+	* EM routing
+	* DCNet
+	* DCNet++
 """
 
 import os

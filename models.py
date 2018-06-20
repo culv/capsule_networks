@@ -7,6 +7,11 @@ S. Sabour et al.
 
 Also contains DCNet, and DCNet++ from 'Dense and Diverse Capsule Networks' by 
 S. Phaye et al.
+
+TODO:
+	* EM routing
+	* DCNet
+	* DCNet++
 """
 
 import os
