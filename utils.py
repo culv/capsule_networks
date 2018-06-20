@@ -95,6 +95,19 @@ def start_vis(port=7777):
 	return Visdom(port=port)
 
 
+# calculate the number of trainable parameters in a model
+def get_num_params(model):
+	"""Get the number of trainable parameters in a model"""
+	
+	# Get parameters
+	params = model.parameters()
+
+	# Filter out params that won't be trained
+	params = filter(lambda p: p.requires_grad, params)
+
+	# Return number of params
+	return sum(np.prod(p.shape) for p in params)
+
 ###############################################################################################################
 
 
