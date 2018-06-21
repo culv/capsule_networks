@@ -130,6 +130,10 @@ class DenseConvNet(nn.Module):
 		cum_in = images
 		out = Variable(torch.Tensor())
 
+		# Send to GPU if possible
+		if torch.cuda.is_available():
+			out = out.cuda()
+
 		# Iteratively stack feature maps and pass through batch-norm, ReLU, and Conv2d for
 		# all layers
 		for i in range(self.num_layers):
