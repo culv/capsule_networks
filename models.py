@@ -11,10 +11,10 @@ S. Phaye et al.
 DONE:
 	* Basic CapsNet
 	* Saving & loading models
+	* DCNet
 
 TODO:
 	* EM routing
-	* DCNet
 	* DCNet++
 """
 
@@ -28,9 +28,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-from layers import ConvNet, PrimaryCaps, DigitCaps, SimpleDecoder, CapsLoss
-
-#from torchviz import make_dot
+import layers
 
 
 class BaseNN(nn.Module):
@@ -55,8 +53,7 @@ class BaseNN(nn.Module):
 		super(BaseNN, self).__init__()
 		self.save_name = save_name
 
-		# Check if checkpoints directory and save_dir exists and create it if necessary
-		# (create it in the direcory where this script lives)
+		# Check if checkpoints directory exists and create it if necessary (create it in this script's direcory)
 		base_path = os.path.dirname(os.path.realpath(__file__))
 		checkpoint_path = os.path.join(base_path, 'checkpoints')
 		self.save_path = os.path.join(checkpoint_path, self.save_name)
@@ -66,10 +63,11 @@ class BaseNN(nn.Module):
 			os.makedirs(checkpoint_path)
 			print('Created checkpoints dir at {}'.format(checkpoint_path))
 
-			if not os.path.exists(save_path):
+		# Also check if save directory exists in checkpoints directory, creating if necessary
+		if not os.path.exists(self.save_path):
 
-				os.makedirs(self.save_path)
-				print('Created checkpoint dir for this model at {}'.format(self.save_path))
+			os.makedirs(self.save_path)
+			print('Created checkpoint dir for this model at {}'.format(self.save_path))
 
 
 	def save_model(self, optimizer, epoch):
@@ -118,7 +116,6 @@ class BaseNN(nn.Module):
 		return epoch, model_state, optimizer
 
 
-
 class BaselineCapsNet(BaseNN):
 	"""Basic Capsule Net from 'Dynamic Routing Between Capsules' by S. Sabour et al.
 
@@ -132,7 +129,7 @@ class BaselineCapsNet(BaseNN):
 	5) Reconstruct images based on digit capsule parameters
 
 	Args:
-		m_plus, m_mins, loss_lambda, reconstruction_lambda:	Hyperparameters for loss function
+		m_plus, m_minus, loss_lambda, reconstruction_lambda: Hyperparameters for loss function
 		save_name: Name to save models under
 
 	Attributes:
@@ -149,13 +146,13 @@ class BaselineCapsNet(BaseNN):
 		super(BaselineCapsNet, self).__init__(save_name)
 
 		# Loss function
-		self.loss = CapsLoss(m_plus, m_minus, loss_lambda, reconstruction_lambda)
+		self.loss = layers.CapsLoss(m_plus, m_minus, loss_lambda, reconstruction_lambda)
 
 		# Network architecture
-		self.conv = ConvNet()
-		self.primary = PrimaryCaps()
-		self.digit = DigitCaps()
-		self.decode = SimpleDecoder()
+		self.conv = layers.ConvNet()
+		self.primary = layers.PrimaryCaps()
+		self.digit = layers.DigitCaps()
+		self.decode = layers.SimpleDecoder()
 
 	def forward(self, images, labels):
 		"""Forward pass of BaselineCapsNet
@@ -211,8 +208,19 @@ class BaselineCapsNet(BaseNN):
 
 
 # TODO
-class DCNet(BaseNN):
-	pass
+class DCNet(BaselineCapsNet):
+	def __init__(self, m_plus=0.9, m_minus=0.1, loss_lambda=0.5, reconstruction_lambda=0.0005, save_name='DCNet'):
+
+		super(DCNet, self).__init__(m_plus, m_minus, loss_lambda, reconstruction_lambda, save_name)
+
+		# Update the network architecture for DCNet
+		self.conv = layers.DenseConvNet()
+		self.primary = layers.PrimaryCaps(c_in=257)
+		self.digit = layers.DigitCaps(num_routes=3200)
+		self.decode = layers.DenseDecoder()
+
+
+
 
 class DCNet_pp(BaseNN):
 	pass
@@ -220,6 +228,9 @@ class DCNet_pp(BaseNN):
 
 # Main function, just used for debugging
 def main():
+
+
+
 	fake_images = torch.randn([2,1,28,28])
 	fake_labels = torch.zeros([2,10])
 	fake_labels[0,5] = 1
@@ -227,18 +238,14 @@ def main():
 	print(fake_labels)
 
 
-	capsule_net = BaselineCapsNet()
+	dc = DCNet()
+	print(dc)
 
 
 	fake_images, fake_labels = Variable(fake_images), Variable(fake_labels)
 
-	# g = make_dot(r, params=dict(capsule_net.named_parameters()))
-	# g.format = 'png'
-	# g.render()
 
-
-
-	cap, reconstruct, predict = capsule_net(fake_images, fake_labels)
+	cap, reconstruct, predict = dc(fake_images, fake_labels)
 	print(cap.shape)
 	print(reconstruct.shape)
 	print(predict.shape)
