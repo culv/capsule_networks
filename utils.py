@@ -8,12 +8,77 @@ and checking GPU and Visdom server availability
 """
 
 from visdom import Visdom
+
 import torch
+from torch.autograd import Variable
+
 import time
+
 import numpy as np
 
 import sys
 import os
+
+
+def squash(caps, dim=2):
+	"""Squash nonlinearity
+
+	Args:
+		caps: Tensor of capsules with shape [batch_size, num_capsules, capsule_dimension].
+	    dim: The dimension (axis) to squash along (default dim=2).
+
+	Returns:
+		Tensor of squashed capsules (has same shape as input).
+	"""
+
+	# Squared norm and norm of each capsule, ||s_j||^2 & ||s_j||
+	square_norm = torch.sum(caps**2, dim, keepdim=True)
+	norm = torch.sqrt(square_norm)
+
+	# Squash nonlinearity: ( norm**2 / (1+norm**2) ) * ( s_j / norm)
+	squashed = (square_norm / (1 + square_norm)) * (caps / norm)
+
+	return squashed
+
+
+def mask(caps, labels, train):
+	"""Utility function for masking non-relevant capsules
+
+	During training, all caps except for ground-truth are masked
+	During testing, all caps except for longest are masked
+
+	Args:
+		caps: The input capsules
+		labels: One-hot vectors of ground-truth labels
+		train: Bool of whether model is training or testing
+
+	Returns:
+		masked: The original capsule tensor where all capsules are zeros
+			except for the relevant capsule
+	"""
+
+	if train:
+		# Argmax to get indices of ground truth class labels
+		_, mask_by =	labels.max(dim=1)
+
+	else:
+		# Argmax to get indices of longest capsules
+		lengths = torch.sqrt((caps**2).sum(2))
+		_, mask_by = lengths.max(dim=1)
+		mask_by = mask_by.squeeze(1).data
+
+	# The mask for capsules based on ground truth (training) or longest (testing)
+	mask = Variable(torch.eye(10))
+	if torch.cuda.is_available():
+		mask = mask.cuda()
+
+	mask = mask.index_select(dim=0, index=mask_by)
+
+	# Return masked caps
+	return caps*mask[:,:,None,None]
+
+
+
 
 class VisdomLinePlotter(object):
 	"""Object used to plot one or multiple lines in Visdom
