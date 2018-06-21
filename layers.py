@@ -8,12 +8,14 @@ and Diverse Capsule Nets (DCNet++)
 Also contains other important capsule network aspects like loss functions and routing algorithms
 
 DONE:
-	* Basic CapsNet
+	* Basic CapsNet layers
+	* DenseDecoder
+	* DenseConvNet
 
 TODO:
-	* EM routing
-	* DCNet
-	* DCNet++
+	* EM routing function
+	* switch to same padding in DenseConvNet
+	* DCNet++ layers
 """
 
 import os
@@ -24,27 +26,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-
-
-def squash(caps, dim=2):
-	"""Squash nonlinearity
-
-	Args:
-		caps: Tensor of capsules with shape [batch_size, num_capsules, capsule_dimension].
-	    dim: The dimension (axis) to squash along (default dim=2).
-
-	Returns:
-		Tensor of squashed capsules (has same shape as input).
-	"""
-
-	# Squared norm and norm of each capsule, ||s_j||^2 & ||s_j||
-	square_norm = torch.sum(caps**2, dim, keepdim=True)
-	norm = torch.sqrt(square_norm)
-
-	# Squash nonlinearity: ( norm**2 / (1+norm**2) ) * ( s_j / norm)
-	squashed = (square_norm / (1 + square_norm)) * (caps / norm)
-
-	return squashed
+# Import squash nonlinearity and capsule masking for reconstruction layer
+from utils import mask, squash
 
 
 class ConvNet(nn.Module):
@@ -72,7 +55,6 @@ class ConvNet(nn.Module):
 			nn.ReLU(inplace=True)
 			)
 
-	# Forward pass of ConvNet.
 	def forward(self, images):
 		"""Forward pass. Returns the outputs of layer after Conv2d() and ReLU().
 		For baseline Capsule Net with MNIST, shape is [batch_size, 256, 20, 20]"""
@@ -80,8 +62,90 @@ class ConvNet(nn.Module):
 		return self.conv(images)
 
 # TODO
-class DenseNet(nn.Module):
-	pass
+#	* switch to same padding
+class DenseConvNet(nn.Module):
+	"""Dense convolutional network from 'Dense and Diverse Capsule Networks' by S. Phaye et al.
+
+	The general idea is that by replacing the simple 1 layer convolutional network with an multi-layer
+	convolutional network with skip connections, the primary capsules will receive more useful and 
+	diverse features.
+
+	Args:
+		num_layers: The total number of Conv2d layers to use
+		image_c_in: The number of channels in the input
+		c_out_per_layer: The number of output channels each layer will output
+		kernel: The kernel size of all Conv2d layers
+		stride: Stride of all Conv2d layers
+		pad: Padding of all Conv2d layers
+
+	Attributes:
+		* num_layers
+		convs: A ModuleList with length=num_layers containing all of the conv filters for each layer
+		batch_norms: A ModuleList with length=num_layers+1 containing all of the batch-norms for each 
+			layer as well as one batch-norm for the final output
+
+	Methods:
+		forward(): Forward pass
+	"""
+
+	def __init__(self, num_layers=8, image_c_in=1, c_out_per_layer=32, kernel=3, stride=1, pad=1):
+		super(DenseConvNet, self).__init__()
+
+		self.num_layers = num_layers
+
+		# Create conv filters for each layer with the proper number of input & output channels
+		# Note that since we are stacking filters using skip connections, the number of input channels to
+		# layer L+1 will be image_c_in + (L * c_out_per_layer)
+		self.convs = nn.ModuleList([
+			nn.Conv2d( (image_c_in + L * c_out_per_layer) , c_out_per_layer, kernel, stride=stride, 
+				padding=pad) for L in range(num_layers)
+			])
+
+		# Create batch norm layers for each layer, and for the final output (so num_layers+1 in total)
+		# Note that similar to the convs ModuleList, the number of input channels to layer L+1 needs to
+		# be image_c_in + (L * c_out_per_layer)
+		self.batch_norms = nn.ModuleList([
+			nn.BatchNorm2d( ( image_c_in + L * c_out_per_layer) ) for L in range(num_layers+1)
+			])
+
+
+	def forward(self, images):
+		"""Forward pass of DenseConvNet
+
+		This network uses skip connections to produce more useful and diverse output features. This works
+		by stacking the original image and output filters from all previous layers, and using them as the
+		input to the next layer.
+
+		For example, the input to layer 3 would be a concatenation of original image, layer 1 output, and
+		layer2 output)
+
+		Args:
+			images: The batch of input images
+
+		Returns:
+			final: The final stack of output kernels from each layer
+		"""
+
+		# Initialize cum_in and out with images and a blank tensor, respectively
+		cum_in = images
+		out = Variable(torch.Tensor())
+
+		# Iteratively stack feature maps and pass through batch-norm, ReLU, and Conv2d for
+		# all layers
+		for i in range(self.num_layers):
+
+			# Concatenate all previous layer's outputs to use as current layer's input
+			cum_in = torch.cat( (cum_in, out), 1)
+
+			# Pass through batch-norm, ReLU, and Conv2d: this will be the output to this layer
+			out = self.convs[i]( F.relu( self.batch_norms[i](cum_in) ) )
+
+		# Concatenate the final output and perform the final batch-norm and ReLU
+		cum_in = torch.cat( (cum_in, out), 1)
+		final = F.relu( self.batch_norms[-1](cum_in) )
+
+		return final
+
 
 class PrimaryCaps(nn.Module):
 	"""PrimaryCaps layer from 'Dynamic Routing Between Capsules' by S. Sabour et al.
@@ -272,10 +336,6 @@ class DigitCaps(nn.Module):
 
 		return v_j
 
-# TODO
-class StackedDecoder(nn.Module):
-	pass
-
 
 class SimpleDecoder(nn.Module):
 	"""Simple decoder from 'Dynamic Routing Between Capsules' by S. Sabour et al.
@@ -286,7 +346,6 @@ class SimpleDecoder(nn.Module):
 
 	Attributes:
 		* Reconstruction (decoder) network
-		* CUDA flag (is GPU available)
 
 	Methods:
 		forward(): Forward pass
@@ -305,10 +364,7 @@ class SimpleDecoder(nn.Module):
 			nn.Sigmoid()
 			)
 
-		# CUDA GPU flag
-		self.CUDA = torch.cuda.is_available()
-
-	def forward(self, dig_caps, labels, train=True):
+	def forward(self, dig_caps, labels):
 		"""Forward pass of SimpleDecoder
 
 		Masks capsules based on either ground truth or max length, then attempts to
@@ -316,32 +372,15 @@ class SimpleDecoder(nn.Module):
 
 		Args:
 			dig_caps: Input of DigitCaps from previous layer
-			labels: Ground truth labels
-			train: Whether to mask based on ground truth (training) or longest capsule (testing)
+			labels: Ground truth labels (as one-hot vectors)
 		
 		Returns:
 			reconstruct: Reconstructed image
 		"""
 
-		if train:
-			# Argmax to get indices of ground truth class labels
-			_, mask_by =	labels.max(dim=1)
-
-		else:
-			# Argmax to get indices of longest capsules
-			lengths = torch.sqrt((dig_caps**2).sum(2))
-			_, mask_by = lengths.max(dim=1)
-			mask_by = mask_by.squeeze(1).data
-
-		# Mask for capsules based on ground truth (training) or longest (testing)
-		mask = Variable(torch.eye(10))
-		if self.CUDA:
-			mask = mask.cuda()
-
-		mask = mask.index_select(dim=0, index=mask_by)
-
-		# Mask and reshape for input into full-connected layer
-		masked = (dig_caps*mask[:,:,None,None]).view(dig_caps.shape[0], -1)
+		# Mask using PyTorch flag to check if model is in train or eval mode, then reshape for fully-connected layers
+		masked = mask(dig_caps, labels, self.training)
+		masked = masked.view(dig_caps.shape[0], -1)
 
 		# Reconstruct original images based on DigitCaps parameters
 		reconstruct = self.reconstruction(masked)
@@ -350,6 +389,68 @@ class SimpleDecoder(nn.Module):
 		reconstruct = reconstruct.view(-1,1,28,28)
 
 		return reconstruct
+
+
+class DenseDecoder(nn.Module):
+	"""Decoder with skip connections from 'Dense and Diverse Capsule Networks' by S. Phaye et al.
+
+	This module reconstructs input images based on capsule activations
+		1) During training, reconstructs the ground-truth capsule
+		2) During testing, reconstructs the longest capsule
+
+	*Different from the SimpleDecoder from 'Dynamic Routing Between Capsules' by S. Sabour et al., this
+	decoder uses a skip connection between layers 1 and 2 as well as an extra fully-connected layer to
+	provide a more powerful network for reconstructing.
+	
+	Attributes:
+		* Network layers
+
+	Methods:
+		forward(): Forward pass
+	"""
+
+	def __init__(self):
+		super(DenseDecoder, self).__init__()
+
+		# Network layers
+		self.layer1 = nn.Linear(16*10, 512)
+		self.layer2 = nn.Linear(512, 512)
+		self.layer3 = nn.Linear(1024, 1024)
+		self.layer4 = nn.Linear(1024, 784)
+	
+
+	def forward(self, caps, labels):
+		"""Forward pass for DenseDecoder
+
+		Mask capsules based on either ground truth or max length (depending on training mode) then
+		reconstruct images from capsule
+
+		Args:
+			caps: Input capsules
+			labels: One-hot ground truth labels
+
+		Returns:
+			reconstructions: Reconstructed images
+		"""
+
+		# Mask capsules based on ground-truth (training) or length (testing) and then flatten
+		masked = mask(caps, labels, self.training)
+		masked = masked.view(caps.shape[0], -1)
+
+
+		# Reconstruct images from capsule
+		layer1_out = F.relu( self.layer1(masked) )
+		layer2_out = F.relu( self.layer2(layer1_out) )
+
+		# Skip connection happens here (concat layer 1 and 2 outputs along dim=1)
+		layer3_in = torch.cat((layer1_out, layer2_out), 1)
+
+		layer3_out = F.relu( self.layer3(layer3_in) )
+
+		reconstructions = F.sigmoid( self.layer4( layer3_out) )
+
+		# Reshape into images and return
+		return reconstructions.view(-1,1,28,28)
 
 
 class CapsLoss(object):
