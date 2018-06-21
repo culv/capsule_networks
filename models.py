@@ -207,8 +207,20 @@ class BaselineCapsNet(BaseNN):
 		return total_loss, m_loss, r_loss
 
 
-# TODO
 class DCNet(BaselineCapsNet):
+	"""Dense Capsule Network, aka DCNet, from 'Dense and Diverse Capsule Networks' by S. Phaye et al.
+
+	The basic idea of this network is to improve upon a regular capsule network by upgrading the
+	conv net feature generator and the decoder. There is no difference in the capsules themselves. Skip connections
+	are added to the conv net and decoder to improve the diversity of feature generation and the power of the 
+	decoder.
+
+	*This class inherits from BaselineCapsNet
+
+	The only difference is an upgraded conv net, an upgraded decoder, and some differences in the 
+	number of input channels and routing nodes for PrimaryCaps and DigitCaps, respectively.
+	"""
+
 	def __init__(self, m_plus=0.9, m_minus=0.1, loss_lambda=0.5, reconstruction_lambda=0.0005, save_name='DCNet'):
 
 		super(DCNet, self).__init__(m_plus, m_minus, loss_lambda, reconstruction_lambda, save_name)
@@ -221,7 +233,7 @@ class DCNet(BaselineCapsNet):
 
 
 
-
+# TODO
 class DCNet_pp(BaseNN):
 	pass
 
