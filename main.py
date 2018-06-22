@@ -37,10 +37,7 @@ if torch.cuda.is_available():
 	BATCH_SIZE = 64
 	LOG_FREQ = 100
 
-NUM_CLASSES = 10
 NUM_EPOCHS = 30
-NUM_ROUTING_ITERATIONS = 3
-
 
 
 # denote data directory and create it if necessary
@@ -50,7 +47,7 @@ if not os.path.exists(DATA_DIR):
 	os.makedirs(DATA_DIR)
 
 
-def main():
+def train(model):
 	# load MNIST training set into torch DataLoader
 	train_loader = torch.utils.data.DataLoader(
 		datasets.MNIST(DATA_DIR, train=True, download=True,
@@ -59,17 +56,11 @@ def main():
 			])),
 		batch_size = BATCH_SIZE, shuffle=True)
 
-	# Create DCNet and CapsNet
-	dcnet = DCNet()
-	capsnet = BaselineCapsNet()
+	# Display architecture
+	print(model)
 
-	# Display architectures
-	print(capsnet)
-	print(dcnet)
-
-	# Display number of trainable parameters in each network
-	print("Capsule Net parameters: ", utils.get_num_params(capsnet))
-	print("DCNet parameters: ", utils.get_num_params(dcnet))
+	# Display number of trainable parameters in network
+	print("Model parameters: ", utils.get_num_params(model))
 
 	# Check CUDA GPU
 	CUDA = utils.check_gpu()
@@ -83,46 +74,38 @@ def main():
 
 	# Send models to GPU if possible
 	if CUDA:
-		capsnet = capsnet.cuda()
-		dcnet = dcnet.cuda()
+		model = model.cuda()
+
 
 	# Create optimizers
-	capsnet_optimizer = Adam(capsnet.parameters())
-	dcnet_optimizer = Adam(dcnet.parameters())
+	optimizer = Adam(model.parameters())
+
 
 	# Create Visdom line plot for training losses
 	loss_log = utils.VisdomLinePlotter(vis, color='orange', title='Training Loss', ylabel='loss', 
 		xlabel='iters', linelabel='Base CapsNet')
-	loss_log.add_new(color='blue', linelabel='Dense CapsNet')
 
 
 	# Create Visdom line plot for training accuracy
-	train_acc_log = utils.VisdomLinePlotter(vis, color='orange', title='Training Accuracy', ylabel='accuracy (%)',
+	train_acc_log = utils.VisdomLinePlotter(vis, color='blue', title='Training Accuracy', ylabel='accuracy (%)',
 								xlabel='iters', linelabel='Base CapsNet')
-	train_acc_log.add_new(color='blue', linelabel='Dense CapsNet')
 
 	# Create Visdom line plot for testing accuracy
 	test_acc_log = utils.VisdomLinePlotter(vis, color='red', title='Testing Accuracy', ylabel='accuracy (%)',
 								xlabel='iters', linelabel='Base CapsNet')
-	test_acc_log.add_new(color='blue', linelabel='Dense CapsNet')
 
 	# for ground truth images and reconstructions for Base CapsNet and DCNet
-	capsnet_image_log = utils.VisdomImagePlotter(vis, title='Base CapsNet', 
-		caption='left: ground truth, right: reconstructions')
-	dcnet_image_log = utils.VisdomImagePlotter(vis, title='Dense CapsNet',
-		caption='left: ground truth, right: reconstructions')
+	image_log = utils.VisdomImagePlotter(vis, caption='ground truth\t ||\treconstruction')
 
 
 	# Make sure network is in train mode so that capsules get masked by ground-truth in reconstruction layer
-	capsnet.train()
-	dcnet.train()
+	model.train()
 
 	global_it = 0
 
 	for epoch in range(NUM_EPOCHS):
 
-		capsnet_running_acc_sum = 0
-		dcnet_running_acc_sum = 0
+		epoch_running_acc_sum = 0
 
 		for it, (images, labels) in enumerate(tqdm(train_loader)):
 
@@ -136,72 +119,63 @@ def main():
 				labels = labels.cuda()
 				labels_compare = labels_compare.cuda()
 
-			capsnet_optimizer.zero_grad() # Clear gradient buffers
-			dcnet_optimizer.zero_grad()
+			optimizer.zero_grad() # Clear gradient buffers
 
+			caps, recons, predicts = model(images, labels) # Forward pass of network
 
-			capsnet_caps, capsnet_recons, capsnet_predicts = capsnet(images, labels) # Forward pass of network
-			dcnet_caps, dcnet_recons, dcnet_predicts = dcnet(images, labels)
+			loss, _, _ = model.get_loss(caps, images, labels, recons) # Calculate loss
+			
 
-			capsnet_loss, _, _ = capsnet.get_loss(capsnet_caps, images, labels, capsnet_recons) # Calculate loss
-			dcnet_loss, _, _ = dcnet.get_loss(dcnet_caps, images, labels, dcnet_recons)
+			loss.backward() # Backprop
 
-			capsnet_loss.backward() # Backprop
-			dcnet_loss.backward()
+			optimizer.step()
 
-			capsnet_optimizer.step()
-			dcnet_optimizer.step()
+			batch_acc = float(labels_compare.eq(predicts).float().mean())
 
-			capsnet_batch_acc = float(labels_compare.eq(capsnet_predicts).float().mean())
-			dcnet_batch_acc = float(labels_compare.eq(dcnet_predicts).float().mean())
+			epoch_running_acc_sum += batch_acc
+			epoch_running_acc = epoch_running_acc_sum/(global_it+1)
 
-			capsnet_running_acc_sum += capsnet_batch_acc
-			capsnet_running_acc = capsnet_running_acc_sum/(global_it+1)
+			loss = float(loss)
 
-			dcnet_running_acc_sum += dcnet_batch_acc
-			dcnet_running_acc = dcnet_running_acc_sum/(global_it+1)
-
-			capsnet_loss, dcnet_loss = float(capsnet_loss), float(dcnet_loss)
-
-
-			if global_it%LOG_FREQ==0 and utils.check_vis(vis):
-					loss_log.update(global_it, [capsnet_loss, dcnet_loss]) # Log loss
-					train_acc_log.update(global_it, [capsnet_batch_acc, dcnet_batch_acc]) # Log batch accuracy
+			if global_it%LOG_FREQ==0:
+				if utils.check_vis(vis):
+					loss_log.update(global_it, [loss]) # Log loss
+					train_acc_log.update(global_it, [batch_acc]) # Log batch accuracy
 
 					if CUDA: # Send images back to CPU if necessary
-						capsnet_recons = capsnet_recons.cpu()
-						dcnet_recons = dcnet_recons.cpu()
+						recons = recons.cpu()
 						images = images.cpu()
 
-					
 					ground_truth_grid = utils.batch_to_grid(images) # Get ground truth images as grid
 					separator = np.ones([ground_truth_grid.shape[0], 10]) # Separator for between truth & reconstructions
 					
-
 					# Get reconstructed images as grid (must detach from Pytorch Variable first)
-					capsnet_recons_grid = utils.batch_to_grid(capsnet_recons.detach())
-					dcnet_recons_grid = utils.batch_to_grid(dcnet_recons.detach())
+					recons_grid = utils.batch_to_grid(recons.detach())
 
 					# Stack ground truth images, separator, and reconstructions into 1 image
-					capsnet_image = np.concatenate((ground_truth_grid, separator, capsnet_recons_grid), 1)
-					dcnet_image = np.concatenate((ground_truth_grid, separator, dcnet_recons_grid), 1)
+					image = np.concatenate((ground_truth_grid, separator, recons_grid), 1)
 
 					# Log images
-					capsnet_image_log.update(capsnet_image)
-					dcnet_image_log.update(dcnet_image)
+					image_log.update(image)					
 
 			global_it += 1
 
 		# Save models each epoch
-		capsnet.save_model(capsnet_optimizer, epoch)
-		dcnet.save_model(dcnet_optimizer, epoch)
+		model.save_model(optimizer, epoch)
+
 
 		# Print training info each epoch
-		print('[Epoch {}]'.format(epoch))
-		print('[CaspNet]\ttrain loss: {:5.2f} | avg epoch acc: {:5.2f} | batch acc: {:5.2f}'.format(
-			capsnet_loss, capsnet_running_acc, capsnet_batch_acc))
-		print('[DCNet]\t\ttrain loss: {:5.2f} | avg epoch acc: {:5.2f} | batch acc: {:5.2f}'.format(
-			dcnet_loss, dcnet_running_acc, dcnet_batch_acc))
+		print('[Epoch {}] train loss: {:5.2f} | avg epoch acc: {:5.2f} | batch acc: {:5.2f}'.format(
+			epoch, loss, epoch_running_acc, batch_acc))
+
+def main():
+	# Create CapsNet and train
+	capsule_net = BaselineCapsNet()
+	train(capsule_net)
+
+	# Create DCNet and train
+	dcnet = DCNet()
+	train(dcnet)
 
 if __name__ == "__main__":
 	main()

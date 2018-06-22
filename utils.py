@@ -2,9 +2,11 @@
 
 """Library for different network utilities
 
-Contains useful utility functions and classes for logging during training with Visdom
-as well as different functions for examining network parameters and reconstruction outputs,
-and checking GPU and Visdom server availability
+Contains useful utility functions and classes for:
+	* Logging during training with Visdom
+	* Examining network parameters and reconstruction outputs,
+	* Nonlinearities and masking functions for capsule networks
+	* Checking GPU and Visdom server availability
 """
 
 from visdom import Visdom
@@ -21,7 +23,7 @@ import os
 
 
 def squash(caps, dim=2):
-	"""Squash nonlinearity
+	"""Squash nonlinearity from 'dynamic Routing Between Capsules' by S. Sabour et al.
 
 	Args:
 		caps: Tensor of capsules with shape [batch_size, num_capsules, capsule_dimension].
@@ -35,7 +37,7 @@ def squash(caps, dim=2):
 	square_norm = torch.sum(caps**2, dim, keepdim=True)
 	norm = torch.sqrt(square_norm)
 
-	# Squash nonlinearity: ( norm**2 / (1+norm**2) ) * ( s_j / norm)
+	# Squash nonlinearity: v_j = ( norm(s_j)**2 / (1+norm(s_j)**2) ) * ( s_j / norm(s_j) )
 	squashed = (square_norm / (1 + square_norm)) * (caps / norm)
 
 	return squashed
