@@ -35,7 +35,7 @@ LOG_FREQ = 2
 
 if torch.cuda.is_available():
 	BATCH_SIZE = 64
-	LOG_FREQ = 100
+	LOG_FREQ = 500
 
 NUM_EPOCHS = 30
 
@@ -149,21 +149,21 @@ def train(model):
 
 				test_acc = 0
 
-				for test_it, (images, labels) in enumerate(test_loader):
+				for test_it, (images_test, labels_test) in enumerate(test_loader):
 
-					labels_compare = labels
-					labels = torch.eye(10).index_select(dim=0, index=labels)
+					labels_compare_test = labels_test
+					labels_test = torch.eye(10).index_select(dim=0, index=labels_test)
 
-					images, labels = Variable(images), Variable(labels)
+					images_test, labels_test = Variable(images_test), Variable(labels_test)
 
 					if CUDA:
-						images = images.cuda()
-						labels = labels.cuda()
-						labels_compare = labels_compare.cuda()
+						images_test = images_test.cuda()
+						labels_test = labels_test.cuda()
+						labels_compare_test = labels_compare_test.cuda()
 
-					caps, recons, predicts = model(images, labels)
+					_, _, predicts_test = model(images_test, labels_test)
 
-					test_acc += float(labels_compare.eq(predicts).float().mean())
+					test_acc += float(labels_compare_test.eq(predicts_test).float().mean())
 
 				test_acc /= test_it+1
 
