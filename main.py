@@ -161,7 +161,7 @@ def train(model):
 						labels = labels.cuda()
 						labels_compare = labels_compare.cuda()
 
-					_, _, predicts = model(images, labels)
+					caps, recons, predicts = model(images, labels)
 
 					test_acc += float(labels_compare.eq(predicts).float().mean())
 
@@ -183,12 +183,6 @@ def train(model):
 					
 					# Get reconstructed images as grid (must detach from Pytorch Variable first)
 					recons_grid = utils.batch_to_grid(recons.detach())
-
-					print(ground_truth_grid.shape)
-					print(separator.shape)
-					print(recons_grid.shape)
-
-					sys.exit()
 
 					# Stack ground truth images, separator, and reconstructions into 1 image
 					image = np.concatenate((ground_truth_grid, separator, recons_grid), 1)
