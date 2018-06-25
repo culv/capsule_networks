@@ -47,6 +47,7 @@ if not os.path.exists(DATA_DIR):
 	os.makedirs(DATA_DIR)
 
 
+
 def train(model):
 	# load MNIST training set into torch DataLoader
 	train_loader = torch.utils.data.DataLoader(
@@ -55,6 +56,15 @@ def train(model):
 				transforms.ToTensor()
 			])),
 		batch_size = BATCH_SIZE, shuffle=True)
+
+
+	test_loader = torch.utils.data.DataLoader(
+		datasets.MNIST(DATA_DIR, train=False, download=True,
+			transform=transforms.Compose([
+				transforms.ToTensor()
+				])),
+		batch_size = BATCH_SIZE, shuffle=True)
+
 
 	# Display architecture
 	print(model)
@@ -85,18 +95,14 @@ def train(model):
 	loss_log = utils.VisdomLinePlotter(vis, color='orange', title='Training Loss', ylabel='loss', 
 		xlabel='iters', linelabel='Base CapsNet')
 
+	# Create Visdom line plot for training and testing accuracy
+	acc_log = utils.VisdomLinePlotter(vis, color='orange', title='Accuracy', ylabel='accuracy (%)',
+								xlabel='iters', linelabel='train')
 
-	# Create Visdom line plot for training accuracy
-	train_acc_log = utils.VisdomLinePlotter(vis, color='blue', title='Training Accuracy', ylabel='accuracy (%)',
-								xlabel='iters', linelabel='Base CapsNet')
-
-	# Create Visdom line plot for testing accuracy
-	test_acc_log = utils.VisdomLinePlotter(vis, color='red', title='Testing Accuracy', ylabel='accuracy (%)',
-								xlabel='iters', linelabel='Base CapsNet')
+	acc_log.add_new(color='blue', linelabel='test')
 
 	# for ground truth images and reconstructions for Base CapsNet and DCNet
 	image_log = utils.VisdomImagePlotter(vis, caption='ground truth\t ||\treconstruction')
-
 
 	# Make sure network is in train mode so that capsules get masked by ground-truth in reconstruction layer
 	model.train()
@@ -138,9 +144,35 @@ def train(model):
 			loss = float(loss)
 
 			if global_it%LOG_FREQ==0:
+
+				model.eval() # set model to evaluation mode to check test accuracy
+
+				test_acc = 0
+
+				for test_it, (images, labels) in enumerate(test_loader):
+
+					labels_compare = labels
+					labels = torch.eye(10).index_select(dim=0, index=labels)
+
+					images, labels = Variable(images), Variable(labels)
+
+					if CUDA:
+						images = images.cuda()
+						labels = labels.cuda()
+						labels_compare = labels_compare.cuda()
+
+					_, _, predicts = model(images, labels)
+
+					test_acc += float(labels_compare.eq(predicts).float().mean())
+
+				test_acc /= test_it+1
+
+				model.train() # put model back in training mode
+
+
 				if utils.check_vis(vis):
 					loss_log.update(global_it, [loss]) # Log loss
-					train_acc_log.update(global_it, [batch_acc]) # Log batch accuracy
+					train_acc_log.update(global_it, [batch_acc, test_acc]) # Log batch accuracy
 
 					if CUDA: # Send images back to CPU if necessary
 						recons = recons.cpu()
@@ -165,8 +197,8 @@ def train(model):
 
 
 		# Print training info each epoch
-		print('[Epoch {}] train loss: {:5.2f} | avg epoch acc: {:5.2f} | batch acc: {:5.2f}'.format(
-			epoch, loss, epoch_running_acc, batch_acc))
+		print('[Epoch {}] train loss: {:5.2f} | train acc: {:5.2f} | test acc: {:5.2f}'.format(
+			epoch, loss, batch_acc, test_acc))
 
 def main():
 	# Create CapsNet and train
