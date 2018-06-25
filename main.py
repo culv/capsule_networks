@@ -172,7 +172,7 @@ def train(model):
 
 				if utils.check_vis(vis):
 					loss_log.update(global_it, [loss]) # Log loss
-					train_acc_log.update(global_it, [batch_acc, test_acc]) # Log batch accuracy
+					acc_log.update(global_it, [batch_acc, test_acc]) # Log batch accuracy
 
 					if CUDA: # Send images back to CPU if necessary
 						recons = recons.cpu()
