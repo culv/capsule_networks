@@ -35,7 +35,7 @@ LOG_FREQ = 2
 
 if torch.cuda.is_available():
 	BATCH_SIZE = 64
-	LOG_FREQ = 500
+	LOG_FREQ = 250
 
 NUM_EPOCHS = 30
 
@@ -190,6 +190,11 @@ def train(model):
 					# Log images
 					image_log.update(image)					
 
+				# Print training info each epoch
+				print('[Epoch {}][Iter {}] train loss: {:5.2f} | train acc: {:7.4f} | test acc: {:7.4f}'.format(
+					it, epoch, loss, batch_acc, test_acc))
+
+
 			global_it += 1
 
 		# Save models each epoch
@@ -197,8 +202,8 @@ def train(model):
 
 
 		# Print training info each epoch
-		print('[Epoch {}] train loss: {:5.2f} | train acc: {:5.2f} | test acc: {:5.2f}'.format(
-			epoch, loss, batch_acc, test_acc))
+		print('[Epoch {}][Iter {}] train loss: {:5.2f} | train acc: {:7.4f} | test acc: {:7.4f}'.format(
+			it, epoch, loss, batch_acc, test_acc))
 
 def main():
 	# Create CapsNet and train
