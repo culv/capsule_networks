@@ -154,7 +154,7 @@ class BaselineCapsNet(BaseNN):
 		self.digit = layers.DigitCaps()
 		self.decode = layers.SimpleDecoder()
 
-	def forward(self, images, labels):
+	def forward(self, images, labels, r_on=True):
 		"""Forward pass of BaselineCapsNet
 
 		Args:
@@ -162,6 +162,7 @@ class BaselineCapsNet(BaseNN):
 				(example: for MNIST, shape [batch_size, 1, 28, 28])
 			labels: Batch of input ground truth labels AS ONE-HOT, shape [batch_size, num_classes]
 				(example: for MNIST, shape [batch_size, 10])
+			r_on: Reconstructions on or off
 
 		Returns:
 			dig_caps: Digit capsules, with vector length corresponding to probability of 
@@ -173,9 +174,6 @@ class BaselineCapsNet(BaseNN):
 		# Compute DigitCaps based on input images
 		dig_caps = self.digit( self.primary( self.conv(images) ) )
 
-		# Get reconstructions based on cap parameters
-		reconstruct = self.decode(dig_caps, labels) # forward pass of reconstructions
-
 		# Squared lengths of digit capsules
 		v_c_sq = (dig_caps**2).sum(2)
 
@@ -183,7 +181,12 @@ class BaselineCapsNet(BaseNN):
 		_, predict = v_c_sq.max(dim=1)
 		predict = predict.squeeze(-1)
 
-		return dig_caps, reconstruct, predict
+		# Get reconstructions based on cap parameters
+		if r_on:
+			reconstruct = self.decode(dig_caps, labels) # forward pass of reconstructions
+			return dig_caps, reconstruct, predict
+		else:
+			return dig_caps, [], predict
 
 
 	def get_loss(self, caps, images, labels, reconstructions):

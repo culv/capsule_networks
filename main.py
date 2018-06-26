@@ -37,7 +37,7 @@ if torch.cuda.is_available():
 	BATCH_SIZE = 64
 	LOG_FREQ = 250
 
-NUM_EPOCHS = 30
+NUM_EPOCHS = 15
 
 
 # denote data directory and create it if necessary
@@ -93,7 +93,7 @@ def train(model):
 
 	# Create Visdom line plot for training losses
 	loss_log = utils.VisdomLinePlotter(vis, color='orange', title='Training Loss', ylabel='loss', 
-		xlabel='iters', linelabel='Base CapsNet')
+		xlabel='iters')
 
 	# Create Visdom line plot for training and testing accuracy
 	acc_log = utils.VisdomLinePlotter(vis, color='orange', title='Accuracy', ylabel='accuracy (%)',
@@ -111,9 +111,7 @@ def train(model):
 
 	for epoch in range(NUM_EPOCHS):
 
-		epoch_running_acc_sum = 0
-
-		for it, (images, labels) in enumerate(tqdm(train_loader)):
+		for _, (images, labels) in enumerate(tqdm(train_loader)):
 
 			labels_compare = labels # Hold onto labels in int form for comparing accuracy
 			labels = torch.eye(10).index_select(dim=0, index=labels) # Convert from int to one-hot for use in networks
@@ -138,10 +136,6 @@ def train(model):
 
 			batch_acc = float(labels_compare.eq(predicts).float().mean())
 
-			epoch_running_acc_sum += batch_acc
-			epoch_running_acc = epoch_running_acc_sum/(global_it+1)
-
-			loss = float(loss)
 
 			if global_it%LOG_FREQ==0:
 
@@ -155,23 +149,22 @@ def train(model):
 					labels_test = torch.eye(10).index_select(dim=0, index=labels_test)
 
 					images_test, labels_test = Variable(images_test), Variable(labels_test)
+					print(images_test.shape[0])
 
 					if CUDA:
 						images_test = images_test.cuda()
 						labels_test = labels_test.cuda()
 						labels_compare_test = labels_compare_test.cuda()
 
-					_, _, predicts_test = model(images_test, labels_test)
+					_, _, predicts_test = model(images_test, labels_test, r_on=False)
 
-					test_acc += float(labels_compare_test.eq(predicts_test).float().mean())
-
-				test_acc /= test_it+1
+					test_acc += float(labels_compare_test.eq(predicts_test).float().mean())/images_test.shape[0]
 
 				model.train() # put model back in training mode
 
 
 				if utils.check_vis(vis):
-					loss_log.update(global_it, [loss]) # Log loss
+					loss_log.update(global_it, [float(loss)]) # Log loss
 					acc_log.update(global_it, [batch_acc, test_acc]) # Log batch accuracy
 
 					if CUDA: # Send images back to CPU if necessary
@@ -190,9 +183,9 @@ def train(model):
 					# Log images
 					image_log.update(image)					
 
-				# Print training info each epoch
-				print('[Epoch {}][Iter {}] train loss: {:5.2f} | train acc: {:7.4f} | test acc: {:7.4f}'.format(
-					it, epoch, loss, batch_acc, test_acc))
+				# Print info each log interval without interfering with tqdm progress bar
+				tqdm.write('[Epoch {}][Iter {}] train loss: {:5.2f} | train acc: {:7.4f} | test acc: {:7.4f}'.format(
+					epoch, it, loss, batch_acc, test_acc))
 
 
 			global_it += 1
@@ -203,7 +196,7 @@ def train(model):
 
 		# Print training info each epoch
 		print('[Epoch {}][Iter {}] train loss: {:5.2f} | train acc: {:7.4f} | test acc: {:7.4f}'.format(
-			it, epoch, loss, batch_acc, test_acc))
+			epoch, it, loss, batch_acc, test_acc))
 
 def main():
 	# Create CapsNet and train
