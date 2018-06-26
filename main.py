@@ -111,7 +111,7 @@ def train(model):
 
 	for epoch in range(NUM_EPOCHS):
 
-		for _, (images, labels) in enumerate(tqdm(train_loader)):
+		for it, (images, labels) in enumerate(tqdm(train_loader)):
 
 			labels_compare = labels # Hold onto labels in int form for comparing accuracy
 			labels = torch.eye(10).index_select(dim=0, index=labels) # Convert from int to one-hot for use in networks
@@ -131,7 +131,6 @@ def train(model):
 			
 
 			loss.backward() # Backprop
-
 			optimizer.step()
 
 			batch_acc = float(labels_compare.eq(predicts).float().mean())
@@ -149,7 +148,6 @@ def train(model):
 					labels_test = torch.eye(10).index_select(dim=0, index=labels_test)
 
 					images_test, labels_test = Variable(images_test), Variable(labels_test)
-					print(images_test.shape[0])
 
 					if CUDA:
 						images_test = images_test.cuda()
@@ -159,6 +157,7 @@ def train(model):
 					_, _, predicts_test = model(images_test, labels_test, r_on=False)
 
 					test_acc += float(labels_compare_test.eq(predicts_test).float().mean())/images_test.shape[0]
+
 
 				model.train() # put model back in training mode
 
