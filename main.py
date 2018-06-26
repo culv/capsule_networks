@@ -191,26 +191,25 @@ def train_loop(model, train_loader, test_loader, vis, save_dir):
 				model.train() # put model back in training mode
 
 
+				if utils.check_gpu(): # Send images back to CPU if necessary
+					recons = recons.cpu()
+					images = images.cpu()
+
+				ground_truth_grid = utils.batch_to_grid(images) # Get ground truth images as grid
+				separator = np.ones([ground_truth_grid.shape[0], 10]) # Separator for between truth & reconstructions
+				
+				# Get reconstructed images as grid (must detach from Pytorch Variable first)
+				recons_grid = utils.batch_to_grid(recons.detach())
+
+				# Stack ground truth images, separator, and reconstructions into 1 image
+				image = np.concatenate((ground_truth_grid, separator, recons_grid), 1)
+
+
+
 				if utils.check_vis(vis):
 					loss_log.update(global_it, [loss]) # Log loss
 					acc_log.update(global_it, [batch_acc, test_acc]) # Log batch accuracy
-
-					if CUDA: # Send images back to CPU if necessary
-						recons = recons.cpu()
-						images = images.cpu()
-
-					ground_truth_grid = utils.batch_to_grid(images) # Get ground truth images as grid
-					separator = np.ones([ground_truth_grid.shape[0], 10]) # Separator for between truth & reconstructions
-					
-					# Get reconstructed images as grid (must detach from Pytorch Variable first)
-					recons_grid = utils.batch_to_grid(recons.detach())
-
-					# Stack ground truth images, separator, and reconstructions into 1 image
-					image = np.concatenate((ground_truth_grid, separator, recons_grid), 1)
-
-					# Log images to Visdom
-					image_log.update(image)
-
+					image_log.update(image) # Log images
 
 
 				# Log loss, accuracies, and images locally
