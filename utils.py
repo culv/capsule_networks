@@ -217,13 +217,7 @@ def batch_to_grid(batch):
 
 def check_gpu():
 	"""Check if CUDA GPU is available"""
-
-	cuda = torch.cuda.is_available()
-	if cuda:
-		print('GPU available - will default to using GPU')
-	else:
-		print('GPU unavailable - will default to using CPU')		
-	return cuda
+	return torch.cuda.is_available()
 
 def check_vis(vis):
 	"""Check if Visdom server is available"""

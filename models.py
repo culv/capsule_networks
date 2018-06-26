@@ -22,6 +22,7 @@ import os
 import sys
 import glob
 
+import tqdm
 
 import torch
 import torch.nn as nn
@@ -88,7 +89,8 @@ class BaseNN(nn.Module):
 
 		torch.save(state, save_here)
 
-		print('[Epoch {}] Saved model to {}'.format(epoch, fname))
+		# Print save status (without interupting any progres bars)
+		tqdm.write('[Epoch {}] Saved model to {}'.format(epoch, fname))
 
 	def load_model(self):
 		"""Load the last model saved in save_dir
@@ -154,7 +156,7 @@ class BaselineCapsNet(BaseNN):
 		self.digit = layers.DigitCaps()
 		self.decode = layers.SimpleDecoder()
 
-	def forward(self, images, labels, r_on=True):
+	def forward(self, images, labels, reconstructions_on=True):
 		"""Forward pass of BaselineCapsNet
 
 		Args:
@@ -162,12 +164,13 @@ class BaselineCapsNet(BaseNN):
 				(example: for MNIST, shape [batch_size, 1, 28, 28])
 			labels: Batch of input ground truth labels AS ONE-HOT, shape [batch_size, num_classes]
 				(example: for MNIST, shape [batch_size, 10])
-			r_on: Reconstructions on or off
+			reconstructions_on: Reconstructions on or off
 
 		Returns:
 			dig_caps: Digit capsules, with vector length corresponding to probability of 
 				existence and values corresponding to instantiation parameters
-			reconstruct: Images reconstructed from digit capsules
+			reconstruct: Images reconstructed from digit capsules. Note that if the arg reconstructions_on is False,
+				this will return an empty list
 			predict: Predicted classes (index of longest capsules for each batch example)
 		"""
 
@@ -182,7 +185,7 @@ class BaselineCapsNet(BaseNN):
 		predict = predict.squeeze(-1)
 
 		# Get reconstructions based on cap parameters
-		if r_on:
+		if reconstructions_on:
 			reconstruct = self.decode(dig_caps, labels) # forward pass of reconstructions
 			return dig_caps, reconstruct, predict
 		else:
